@@ -33,25 +33,6 @@ static void YTKACEStartupBlacken(UIView *view, UIColor *color) {
     }
 }
 
-static void YTKACEStartupViewDidLoad(UIViewController *receiver,
-                                     SEL selector) {
-    IMP original = YTKACEStartupOriginal(receiver, selector);
-    if (original != NULL) {
-        ((void (*)(id, SEL))original)(receiver, selector);
-    }
-    if (YTKACEOLEDActive(receiver.traitCollection)) {
-        UIColor *themeColor = YTKACEThemeBackgroundColor(receiver.traitCollection);
-        receiver.view.backgroundColor = themeColor;
-        YTKACEStartupBlacken(receiver.view, themeColor);
-        receiver.view.window.backgroundColor = themeColor;
-    }
-    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Appearance.LaunchAnimationDisabled")) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            YTKACEFinishStartup(receiver);
-        });
-    }
-}
-
 static void YTKACEFinishStartup(UIViewController *receiver) {
     SEL delegateSelector = NSSelectorFromString(@"delegate");
     id delegate = [receiver respondsToSelector:delegateSelector]
@@ -69,6 +50,25 @@ static void YTKACEFinishStartup(UIViewController *receiver) {
         return;
     }
     [receiver dismissViewControllerAnimated:NO completion:nil];
+}
+
+static void YTKACEStartupViewDidLoad(UIViewController *receiver,
+                                     SEL selector) {
+    IMP original = YTKACEStartupOriginal(receiver, selector);
+    if (original != NULL) {
+        ((void (*)(id, SEL))original)(receiver, selector);
+    }
+    if (YTKACEOLEDActive(receiver.traitCollection)) {
+        UIColor *themeColor = YTKACEThemeBackgroundColor(receiver.traitCollection);
+        receiver.view.backgroundColor = themeColor;
+        YTKACEStartupBlacken(receiver.view, themeColor);
+        receiver.view.window.backgroundColor = themeColor;
+    }
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Appearance.LaunchAnimationDisabled")) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            YTKACEFinishStartup(receiver);
+        });
+    }
 }
 
 static void YTKACEStartupViewDidAppear(UIViewController *receiver,
