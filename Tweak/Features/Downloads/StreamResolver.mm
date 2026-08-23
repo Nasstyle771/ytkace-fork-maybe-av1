@@ -10,6 +10,8 @@
 
 @implementation YTKACEStreamOption
 
+@synthesize codecLabel = _codecLabel;
+
 - (BOOL)isAV1 {
     NSString *mime = self.mimeType.lowercaseString;
     return [mime containsString:@"av01"] || [mime containsString:@"av1"];
@@ -127,11 +129,9 @@ static NSInteger YTKACEQualityHeight(NSString *label) {
 }
 
 static NSInteger YTKACEVideoPreference(YTKACEStreamOption *option) {
-    NSString *mime = option.mimeType.lowercaseString;
-    if ([mime containsString:@"avc1"]) return 4;
-    if ([mime containsString:@"av01"] || [mime containsString:@"av1"]) return 3;
-    if ([mime containsString:@"vp09"] || [mime containsString:@"vp9"]) return 2;
-    if ([mime containsString:@"video/mp4"]) return 1;
+    if (option.isH264) return 3;
+    if (option.isAV1) return 2;
+    if (option.isVP9) return 1;
     return 0;
 }
 
@@ -276,8 +276,8 @@ static YTKACEStreamOption *YTKACEOptionFromFormat(id format, BOOL adaptive) {
             if (left.height != right.height) {
                 return left.height > right.height ? NSOrderedAscending : NSOrderedDescending;
             }
-            NSInteger leftPref = left.isH264 ? 3 : (left.isAV1 ? 2 : (left.isVP9 ? 1 : 0));
-            NSInteger rightPref = right.isH264 ? 3 : (right.isAV1 ? 2 : (right.isVP9 ? 1 : 0));
+            NSInteger leftPref = YTKACEVideoPreference(left);
+            NSInteger rightPref = YTKACEVideoPreference(right);
             if (leftPref != rightPref) {
                 return leftPref > rightPref ? NSOrderedAscending : NSOrderedDescending;
             }
