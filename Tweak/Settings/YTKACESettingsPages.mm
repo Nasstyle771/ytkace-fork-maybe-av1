@@ -1438,7 +1438,10 @@ static NSDictionary *YTKACEStreamingOptionsDefinition(void) {
     return YTKACEPageDefinition(@"playback", @"Playback", @[
         @[
             YTKACEToggle(@"Old Quality Menu", @"YTKACE.Preference.Playback.LegacyQualityMenu", @"", @""),
-            YTKACEToggle(@"Extended Video Buffer", @"YTKACE.Preference.Playback.ExtendedBuffer", @"Preloads up to 2 minutes ahead for instant scrubbing.", @""),
+            YTKACEPicker(@"Video Preload Buffer",
+                         @"YTKACE.Preference.Playback.BufferSize",
+                         @[@"Default (15-30s)", @"1 Minute (60s)", @"2 Minutes (120s)", @"5 Minutes (300s)", @"10 Minutes (600s)", @"Maximum (30m / Full)"],
+                         @[@0, @1, @2, @3, @4, @5], 2, @"Controls how much video is buffered ahead for instant seeking without loading spinners.", @""),
             YTKACEToggle(@"Disable HDR Playback", @"YTKACE.Preference.Playback.DisableHDR", @"Forces SDR streams to prevent screen blinding in dark rooms.", @"")
         ],
         @[

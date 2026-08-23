@@ -281,10 +281,27 @@ static BOOL YTKACEFormatIsHDR(id receiver, SEL selector) {
     return original != NULL ? ((BOOL (*)(id, SEL))original)(receiver, selector) : NO;
 }
 
+static NSTimeInterval YTKACEConfiguredBufferDuration(void) {
+    id value = YTKACEPreferenceObject(@"YTKACE.Preference.Playback.BufferSize");
+    NSInteger index = [value respondsToSelector:@selector(integerValue)] ? [value integerValue] : -1;
+    if (index < 0) {
+        return YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.ExtendedBuffer") ? 120.0 : 0.0;
+    }
+    switch (index) {
+        case 1: return 60.0;    // 1 min
+        case 2: return 120.0;   // 2 min
+        case 3: return 300.0;   // 5 min
+        case 4: return 600.0;   // 10 min
+        case 5: return 1800.0;  // 30 min / max
+        default: return 0.0;    // default
+    }
+}
+
 static IMP OriginalPlayerItemSetPreferredForwardBufferDuration;
 static void YTKACEPlayerItemSetPreferredForwardBufferDuration(AVPlayerItem *receiver, SEL selector, NSTimeInterval duration) {
-    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.ExtendedBuffer")) {
-        duration = MAX(duration, 120.0);
+    NSTimeInterval target = YTKACEConfiguredBufferDuration();
+    if (target > 0.0) {
+        duration = MAX(duration, target);
     }
     if (OriginalPlayerItemSetPreferredForwardBufferDuration != NULL) {
         ((void (*)(id, SEL, NSTimeInterval))OriginalPlayerItemSetPreferredForwardBufferDuration)(receiver, selector, duration);
@@ -293,12 +310,22 @@ static void YTKACEPlayerItemSetPreferredForwardBufferDuration(AVPlayerItem *rece
 
 static IMP OriginalSetCanUseNetworkWhilePaused;
 static void YTKACESetCanUseNetworkWhilePaused(AVPlayerItem *receiver, SEL selector, BOOL allowed) {
-    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.ExtendedBuffer")) {
+    NSTimeInterval target = YTKACEConfiguredBufferDuration();
+    if (target > 0.0) {
         allowed = YES;
     }
     if (OriginalSetCanUseNetworkWhilePaused != NULL) {
         ((void (*)(id, SEL, BOOL))OriginalSetCanUseNetworkWhilePaused)(receiver, selector, allowed);
     }
+}
+
+static double YTKACEHamForwardBuffer(id receiver, SEL selector) {
+    NSTimeInterval target = YTKACEConfiguredBufferDuration();
+    if (target > 0.0) {
+        return target;
+    }
+    IMP original = YTKACEStreamingOriginal(receiver, selector);
+    return original != NULL ? ((double (*)(id, SEL))original)(receiver, selector) : 30.0;
 }
 
 static BOOL YTKACECellularQualityValue(id receiver, SEL selector) {
@@ -454,6 +481,12 @@ void YTKACEInstallStreamingHooks(void) {
     for (NSString *className in @[@"MLVideoFormat", @"MLFormat3"]) {
         for (NSString *selectorName in @[@"isHDR", @"isHdr", @"hasHdr"]) {
             YTKACEInstallBoolGetter(className, selectorName, (IMP)YTKACEFormatIsHDR);
+        }
+    }
+
+    for (NSString *className in @[@"YTIHamplayerHotConfig", @"HAMPlayerConfiguration", @"MLHAMPlayerItem", @"MLPlayerPool"]) {
+        for (NSString *selectorName in @[@"forwardBufferDuration", @"maxBufferDuration", @"bufferDuration", @"preferredForwardBufferDuration"]) {
+            YTKACEInstallInstanceHook(className, selectorName, (IMP)YTKACEHamForwardBuffer, NULL);
         }
     }
 
