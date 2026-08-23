@@ -143,7 +143,7 @@ void YTKACERegisterDefaults(void) {
         @"YTKACE.Preference.Tabs.Hidden.WatchLater": @YES,
         @"YTKACE.Preference.Tabs.Order": @[@"home", @"shorts", @"subscriptions", @"library", @"ytkace"]
     };
-    [defaults registerDefaults:defaultDict];
+    [YTKACEDefaults() registerDefaults:defaultDict];
     os_unfair_lock_lock(&s_prefLock);
     if (s_prefCache == nil) {
         s_prefCache = [defaultDict mutableCopy];
