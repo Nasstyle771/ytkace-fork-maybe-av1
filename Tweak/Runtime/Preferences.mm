@@ -100,15 +100,19 @@ void YTKACERegisterDefaults(void) {
         @"YTKACE.Preference.Gestures.BrightnessSide": @2,
         @"YTKACE.Preference.Gestures.Enabled": @NO,
         @"YTKACE.Preference.Gestures.ActivationArea": @20.0,
-        @"YTKACE.Preference.Gestures.LeftAction": @0,
-        @"YTKACE.Preference.Gestures.RightAction": @0,
-        @"YTKACE.Preference.Gestures.HUDEnabled": @YES,
-        @"YTKACE.Preference.Gestures.HUDSize": @1,
-        @"YTKACE.Preference.Gestures.HUDPosition": @0,
-        @"YTKACE.Preference.Tabs.Startup": @0,
-        @"YTKACE.Preference.Tabs.FrostedHidden": @NO,
+        YTKACESleepTimerKey: @NO,
+        @"YTKACE.Preference.Downloads.PreferredVideoQuality": @1080,
+        @"YTKACE.Preference.Downloads.PreferredAudioQuality": @160,
+        @"YTKACE.Preference.Downloads.AudioFormat": @1,
+        @"YTKACE.Preference.Downloads.AlwaysAsk": @NO,
+        @"YTKACE.Preference.Downloads.AutoImport": @NO,
+        @"YTKACE.Preference.Playback.DefaultQuality": @1080,
+        @"YTKACE.Preference.Playback.DefaultAudioQuality": @160,
         @"YTKACE.Preference.Playback.WiFiQuality": @0,
         @"YTKACE.Preference.Playback.CellularQuality": @0,
+        @"YTKACE.Preference.Playback.AutoDismissPausedPrompt": @YES,
+        @"YTKACE.Preference.App.HapticsEnabled": @YES,
+        @"YTKACE.Preference.Gestures.HoldSpeedMultiplier": @1,
         @"YTKACE.Preference.SponsorBlock.Mode": @0,
         @"YTKACE.Preference.SponsorBlock.SkipAlertSeconds": @4.0,
         @"YTKACE.Preference.SponsorBlock.UnskipAlertSeconds": @4.0,
@@ -134,7 +138,13 @@ void YTKACERegisterDefaults(void) {
         @"YTKACE.Preference.Tabs.Hidden.Notifs": @YES,
         @"YTKACE.Preference.Tabs.Hidden.WatchLater": @YES,
         @"YTKACE.Preference.Tabs.Order": @[@"home", @"shorts", @"subscriptions", @"library", @"ytkace"]
-    }];
+    };
+    [defaults registerDefaults:defaultDict];
+    os_unfair_lock_lock(&s_prefLock);
+    if (s_prefCache == nil) {
+        s_prefCache = [defaultDict mutableCopy];
+    }
+    os_unfair_lock_unlock(&s_prefLock);
     if ((!hasLeftAction || !hasRightAction) &&
         (legacyBrightnessSide != nil || legacyVolumeSide != nil)) {
         NSInteger brightness = legacyBrightnessSide != nil
@@ -189,7 +199,18 @@ BOOL YTKACEFeatureEnabled(NSString *key) {
     if (!YTKACEMasterEnabled() || key.length == 0) {
         return NO;
     }
-    return [YTKACEDefaults() boolForKey:key];
+    os_unfair_lock_lock(&s_prefLock);
+    NSNumber *cached = s_prefCache != nil ? s_prefCache[key] : nil;
+    os_unfair_lock_unlock(&s_prefLock);
+    if (cached != nil) {
+        return cached.boolValue;
+    }
+    BOOL val = [YTKACEDefaults() boolForKey:key];
+    os_unfair_lock_lock(&s_prefLock);
+    if (s_prefCache == nil) s_prefCache = [NSMutableDictionary dictionary];
+    s_prefCache[key] = @(val);
+    os_unfair_lock_unlock(&s_prefLock);
+    return val;
 }
 
 BOOL YTKACEOLEDActive(UITraitCollection *traits) {
@@ -417,6 +438,10 @@ void YTKACESetPreference(NSString *key, BOOL enabled) {
     if (key.length == 0) {
         return;
     }
+    os_unfair_lock_lock(&s_prefLock);
+    if (s_prefCache == nil) s_prefCache = [NSMutableDictionary dictionary];
+    s_prefCache[key] = @(enabled);
+    os_unfair_lock_unlock(&s_prefLock);
 
     if ([key isEqualToString:YTKACEMasterEnabledKey]) {
         [YTKACEDefaults() setBool:YES forKey:key];
@@ -431,13 +456,35 @@ id YTKACEPreferenceObject(NSString *key) {
     if (key.length == 0) {
         return nil;
     }
-    return [YTKACEDefaults() objectForKey:key];
+    os_unfair_lock_lock(&s_prefLock);
+    id cached = s_prefCache != nil ? s_prefCache[key] : nil;
+    os_unfair_lock_unlock(&s_prefLock);
+    if (cached != nil) {
+        return cached;
+    }
+    id val = [YTKACEDefaults() objectForKey:key];
+    if (val != nil) {
+        os_unfair_lock_lock(&s_prefLock);
+        if (s_prefCache == nil) s_prefCache = [NSMutableDictionary dictionary];
+        s_prefCache[key] = val;
+        os_unfair_lock_unlock(&s_prefLock);
+    }
+    return val;
 }
 
 void YTKACESetPreferenceObject(NSString *key, id value) {
     if (key.length == 0) {
         return;
     }
+    os_unfair_lock_lock(&s_prefLock);
+    if (s_prefCache == nil) s_prefCache = [NSMutableDictionary dictionary];
+    if (value == nil) {
+        [s_prefCache removeObjectForKey:key];
+    } else {
+        s_prefCache[key] = value;
+    }
+    os_unfair_lock_unlock(&s_prefLock);
+
     if (value == nil) {
         [YTKACEDefaults() removeObjectForKey:key];
     } else {

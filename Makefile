@@ -13,6 +13,7 @@ YTKACE_FILES = \
 	Tweak/Runtime/Localization.mm \
 	Tweak/UI/Assets.mm \
 	Tweak/UI/Notice.mm \
+	Tweak/UI/Haptics.mm \
 	Tweak/UI/OverlayButtonHost.mm \
 	Tweak/Features/Ads/AdsHooks.mm \
 	Tweak/Features/Ads/PromoHooks.mm \

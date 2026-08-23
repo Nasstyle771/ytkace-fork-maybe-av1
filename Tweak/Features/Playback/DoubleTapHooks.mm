@@ -1,6 +1,7 @@
 #import "../../YTKACE.h"
 #import "../../Runtime/Hooking.h"
 #import "../../Runtime/Preferences.h"
+#import "../../UI/Haptics.h"
 
 #import <UIKit/UIKit.h>
 #import <math.h>
@@ -156,6 +157,10 @@ static BOOL YTKACETapHitsOverlayControl(UIView *view, CGPoint point,
     BOOL committed = YTKACECommitTapSeek(view, time);
     if (!committed && [view respondsToSelector:nativeSeek]) {
         ((void (*)(id, SEL, double))objc_msgSend)(view, nativeSeek, time);
+        committed = YES;
+    }
+    if (committed) {
+        YTKACEHapticImpact(UIImpactFeedbackStyleLight);
     }
 }
 

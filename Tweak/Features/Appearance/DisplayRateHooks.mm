@@ -11,7 +11,12 @@ static IMP OriginalObjectForInfoDictionaryKey;
 static IMP OriginalInfoDictionary;
 static IMP OriginalDisplayLinkSetPreferredFrameRateRange;
 static IMP OriginalDisplayLinkSetPreferredFramesPerSecond;
+static IMP OriginalLayerSetPreferredFrameRateRange;
+static IMP OriginalAnimationSetPreferredFrameRateRange;
 static IMP OriginalScrollViewDidMoveToWindow;
+static IMP OriginalCollectionViewCellDidMoveToWindow;
+static IMP OriginalTableViewCellDidMoveToWindow;
+static IMP OriginalASDisplayViewDidMoveToWindow;
 
 static id YTKACEObjectForInfoDictionaryKey(NSBundle *receiver, SEL selector, NSString *key) {
     if ([key isEqualToString:@"CADisableMinimumFrameDurationOnPhone"] ||
@@ -41,8 +46,6 @@ static void YTKACEDisplayLinkSetPreferredFrameRateRange(CADisplayLink *receiver,
                                                        SEL selector,
                                                        CAFrameRateRange range) {
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
-        // Keep 24fps / 30fps cinema playback untouched for native cadence,
-        // but lock all UI/gestures/scrolling/animations (>=60fps) to 120Hz!
         if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
             range = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
         }
@@ -65,15 +68,93 @@ static void YTKACEDisplayLinkSetPreferredFramesPerSecond(CADisplayLink *receiver
     }
 }
 
+static void YTKACELayerSetPreferredFrameRateRange(CALayer *receiver,
+                                                 SEL selector,
+                                                 CAFrameRateRange range) {
+    if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
+        if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
+            range = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+        }
+    }
+    if (OriginalLayerSetPreferredFrameRateRange != NULL) {
+        ((void (*)(id, SEL, CAFrameRateRange))OriginalLayerSetPreferredFrameRateRange)(
+            receiver, selector, range);
+    }
+}
+
+static void YTKACEAnimationSetPreferredFrameRateRange(CAAnimation *receiver,
+                                                     SEL selector,
+                                                     CAFrameRateRange range) {
+    if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
+        if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
+            range = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+        }
+    }
+    if (OriginalAnimationSetPreferredFrameRateRange != NULL) {
+        ((void (*)(id, SEL, CAFrameRateRange))OriginalAnimationSetPreferredFrameRateRange)(
+            receiver, selector, range);
+    }
+}
+
 static void YTKACEScrollViewDidMoveToWindow(UIScrollView *receiver, SEL selector) {
     if (OriginalScrollViewDidMoveToWindow != NULL) {
         ((void (*)(id, SEL))OriginalScrollViewDidMoveToWindow)(receiver, selector);
     }
-    if (!YTKACEFeatureEnabled(YTKACEForce120HzKey) || receiver.window == nil) return;
+    if (receiver.window == nil) return;
 
-    if (@available(iOS 15.0, *)) {
-        // Lock the scroll view's pan gesture and deceleration rate to full 120Hz range
-        receiver.panGestureRecognizer.allowedTouchTypes = @[@(UITouchTypeDirect)];
+    if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
+        receiver.layer.drawsAsynchronously = YES;
+        receiver.delaysContentTouches = NO;
+        receiver.canCancelContentTouches = YES;
+        if ([receiver isKindOfClass:UICollectionView.class]) {
+            ((UICollectionView *)receiver).prefetchingEnabled = YES;
+        }
+        if (@available(iOS 15.0, *)) {
+            receiver.panGestureRecognizer.allowedTouchTypes = @[@(UITouchTypeDirect)];
+            receiver.layer.preferredFrameRateRange = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+        }
+    }
+}
+
+static void YTKACECollectionViewCellDidMoveToWindow(UICollectionViewCell *receiver, SEL selector) {
+    if (OriginalCollectionViewCellDidMoveToWindow != NULL) {
+        ((void (*)(id, SEL))OriginalCollectionViewCellDidMoveToWindow)(receiver, selector);
+    }
+    if (receiver.window == nil) return;
+
+    receiver.layer.drawsAsynchronously = YES;
+    if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
+        if (@available(iOS 15.0, *)) {
+            receiver.layer.preferredFrameRateRange = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+        }
+    }
+}
+
+static void YTKACETableViewCellDidMoveToWindow(UITableViewCell *receiver, SEL selector) {
+    if (OriginalTableViewCellDidMoveToWindow != NULL) {
+        ((void (*)(id, SEL))OriginalTableViewCellDidMoveToWindow)(receiver, selector);
+    }
+    if (receiver.window == nil) return;
+
+    receiver.layer.drawsAsynchronously = YES;
+    if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
+        if (@available(iOS 15.0, *)) {
+            receiver.layer.preferredFrameRateRange = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+        }
+    }
+}
+
+static void YTKACEASDisplayViewDidMoveToWindow(UIView *receiver, SEL selector) {
+    if (OriginalASDisplayViewDidMoveToWindow != NULL) {
+        ((void (*)(id, SEL))OriginalASDisplayViewDidMoveToWindow)(receiver, selector);
+    }
+    if (receiver.window == nil) return;
+
+    receiver.layer.drawsAsynchronously = YES;
+    if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
+        if (@available(iOS 15.0, *)) {
+            receiver.layer.preferredFrameRateRange = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+        }
     }
 }
 
@@ -98,8 +179,33 @@ void YTKACEInstallDisplayRateHooks(void) {
                               (IMP)YTKACEDisplayLinkSetPreferredFramesPerSecond,
                               &OriginalDisplayLinkSetPreferredFramesPerSecond);
 
+    YTKACEInstallInstanceHook(@"CALayer",
+                              @"setPreferredFrameRateRange:",
+                              (IMP)YTKACELayerSetPreferredFrameRateRange,
+                              &OriginalLayerSetPreferredFrameRateRange);
+
+    YTKACEInstallInstanceHook(@"CAAnimation",
+                              @"setPreferredFrameRateRange:",
+                              (IMP)YTKACEAnimationSetPreferredFrameRateRange,
+                              &OriginalAnimationSetPreferredFrameRateRange);
+
     YTKACEInstallInstanceHook(@"UIScrollView",
                               @"didMoveToWindow",
                               (IMP)YTKACEScrollViewDidMoveToWindow,
                               &OriginalScrollViewDidMoveToWindow);
+
+    YTKACEInstallInstanceHook(@"UICollectionViewCell",
+                              @"didMoveToWindow",
+                              (IMP)YTKACECollectionViewCellDidMoveToWindow,
+                              &OriginalCollectionViewCellDidMoveToWindow);
+
+    YTKACEInstallInstanceHook(@"UITableViewCell",
+                              @"didMoveToWindow",
+                              (IMP)YTKACETableViewCellDidMoveToWindow,
+                              &OriginalTableViewCellDidMoveToWindow);
+
+    YTKACEInstallInstanceHook(@"_ASDisplayView",
+                              @"didMoveToWindow",
+                              (IMP)YTKACEASDisplayViewDidMoveToWindow,
+                              &OriginalASDisplayViewDidMoveToWindow);
 }

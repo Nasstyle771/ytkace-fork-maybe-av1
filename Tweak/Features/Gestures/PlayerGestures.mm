@@ -1,6 +1,7 @@
 #import "../../YTKACE.h"
 #import "../../Runtime/Hooking.h"
 #import "../../Runtime/Preferences.h"
+#import "../../UI/Haptics.h"
 
 #import <AVFoundation/AVFoundation.h>
 #import <MediaPlayer/MediaPlayer.h>
@@ -500,6 +501,7 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
         if (self.seekTarget == nil) {
             return;
         }
+        YTKACEHapticImpact(UIImpactFeedbackStyleMedium);
         self.seekView = view;
         CGPoint location = [recognizer locationInView:view];
         self.seekDirection =

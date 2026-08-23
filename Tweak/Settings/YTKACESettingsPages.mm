@@ -1531,9 +1531,15 @@ static NSDictionary *YTKACEMiscOptionsDefinition(void) {
         @[
             YTKACEToggle(@"iOS Share Sheet", @"YTKACE.Preference.Sharing.NativeSheet", @"", @""),
             YTKACEToggle(@"Avatar Preview", @"YTKACE.Preference.Profiles.Preview", @"", @""),
-            YTKACEToggle(@"Mini Player for Kids Videos", @"YTKACE.Preference.Playback.KidsMiniPlayer", @"", @"")
+            YTKACEToggle(@"Mini Player for Kids Videos", @"YTKACE.Preference.Playback.KidsMiniPlayer", @"", @""),
+            YTKACEToggleDetail(@"Haptic Feedback",
+                               @"Subtle vibration feedback on gestures, seek scrubbing, and actions.",
+                               @"YTKACE.Preference.App.HapticsEnabled")
         ],
         @[
+            YTKACEToggleDetail(@"Auto-Dismiss 'Video Paused'",
+                               @"Automatically dismisses pause prompts and resumes playback.",
+                               @"YTKACE.Preference.Playback.AutoDismissPausedPrompt"),
             YTKACEToggle(@"Don't Save Searches", @"YTKACE.Preference.Privacy.SearchHistoryDisabled", @"", @""),
             YTKACEToggle(@"Block Premium Prompts", @"YTKACE.Preference.Ads.PremiumPromosHidden", @"", @""),
             YTKACEToggle(@"Block Update Prompts", @"YTKACE.Preference.App.UpdatePromptHidden", @"", @""),
