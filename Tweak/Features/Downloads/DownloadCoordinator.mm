@@ -123,6 +123,7 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
         configuration.timeoutIntervalForResource = 60.0 * 60.0;
         NSOperationQueue *queue = [NSOperationQueue new];
         queue.maxConcurrentOperationCount = 3;
+        queue.qualityOfService = NSQualityOfServiceUserInitiated;
         _session = [NSURLSession sessionWithConfiguration:configuration
                                                  delegate:self
                                             delegateQueue:queue];
@@ -868,8 +869,10 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
         NSString *size = option.contentLength > 0
             ? [NSByteCountFormatter stringFromByteCount:option.contentLength
                 countStyle:NSByteCountFormatterCountStyleFile] : YTKACELocalized(@"Unknown size");
-        NSString *title = [NSString stringWithFormat:@"%@ (mp4) · %@",
-            option.qualityLabel.length != 0 ? option.qualityLabel : YTKACELocalized(@"Video"), size];
+        NSString *codec = option.codecLabel.length != 0 ? option.codecLabel : @"H.264";
+        NSString *quality = option.qualityLabel.length != 0
+            ? option.qualityLabel : [NSString stringWithFormat:@"%ldp", (long)option.height];
+        NSString *title = [NSString stringWithFormat:@"%@ (%@) · %@", quality, codec, size];
         [actions addObject:[self sheetAction:title icon:@"play"
             secondary:nil handler:^{
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW,

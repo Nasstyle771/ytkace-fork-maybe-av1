@@ -236,7 +236,7 @@ cleanup:
 + (void)remuxAudioURL:(NSURL *)audioURL
             outputURL:(NSURL *)outputURL
            completion:(YTKACEFFmpegCompletion)completion {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
         av_log_set_level(AV_LOG_ERROR);
         NSError *error = YTKACERemuxAudio(audioURL, outputURL);
@@ -248,7 +248,7 @@ cleanup:
              audioURL:(NSURL *)audioURL
             outputURL:(NSURL *)outputURL
            completion:(YTKACEFFmpegCompletion)completion {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
         av_log_set_level(AV_LOG_ERROR);
         NSError *error = YTKACERemux(videoURL, audioURL, outputURL);
@@ -259,7 +259,7 @@ cleanup:
 + (void)normalizeMediaURL:(NSURL *)mediaURL
                 outputURL:(NSURL *)outputURL
                completion:(YTKACEFFmpegCompletion)completion {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
         av_log_set_level(AV_LOG_ERROR);
         NSError *error = YTKACERemux(mediaURL, mediaURL, outputURL);

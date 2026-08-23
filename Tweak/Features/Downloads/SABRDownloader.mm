@@ -7,7 +7,7 @@
 #import <objc/runtime.h>
 
 #ifndef YTKACE_COMBINED_SABR
-#define YTKACE_COMBINED_SABR 0
+#define YTKACE_COMBINED_SABR 1
 #endif
 
 static NSString *const YTKACESABRErrorDomain = @"YTKACESABR";
@@ -846,11 +846,11 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     configuration.allowsCellularAccess = YES;
     configuration.allowsExpensiveNetworkAccess = YES;
     configuration.allowsConstrainedNetworkAccess = YES;
-    configuration.networkServiceType = (NSURLRequestNetworkServiceType)8;
-    configuration.HTTPMaximumConnectionsPerHost = 4;
+    configuration.networkServiceType = NSURLNetworkServiceTypeResponsiveData;
+    configuration.HTTPMaximumConnectionsPerHost = 8;
     NSOperationQueue *queue = [NSOperationQueue new];
-    queue.maxConcurrentOperationCount = 1;
-    queue.qualityOfService = NSQualityOfServiceUtility;
+    queue.maxConcurrentOperationCount = 4;
+    queue.qualityOfService = NSQualityOfServiceUserInitiated;
     self.session = [NSURLSession sessionWithConfiguration:configuration
         delegate:self delegateQueue:queue];
     NSString *serverHost = [NSURL URLWithString:self.serverURL].host ?: @"unknown";
@@ -1070,7 +1070,7 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     YTKACEDownloadLog(self.identifier, @"retry %ld delay=%.1f reason=%@",
         (long)self.retryCount, delay, error.localizedDescription);
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
-        dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ [self sendRequest]; });
+        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ [self sendRequest]; });
 }
 
 - (void)handleInitialization:(NSData *)data {
@@ -1255,49 +1255,51 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     NSMutableDictionary<NSNumber *, NSNumber *> *partBytes = [NSMutableDictionary dictionary];
     NSUInteger offset = 0;
     while (offset < response.length) {
-        uint32_t type = 0;
-        uint32_t size = 0;
-        if (!YTKACEUMPValue(response, &offset, &type) ||
-            !YTKACEUMPValue(response, &offset, &size) || offset + size > response.length) {
-            [self retryOrFail:[self error:@"YouTube returned an incomplete SABR response." code:5]];
-            return;
-        }
-        NSData *part = [response subdataWithRange:NSMakeRange(offset, size)];
-        offset += size;
-        NSNumber *partType = @(type);
-        partCounts[partType] = @([partCounts[partType] unsignedIntegerValue] + 1);
-        partBytes[partType] = @([partBytes[partType] unsignedLongLongValue] + size);
-        if (self.requestNumber <= 1 && (type == 46 || type == 51)) {
-            YTKACEDownloadLog(self.identifier, @"directive type=%u data=%@", type,
-                [part base64EncodedStringWithOptions:0]);
-        }
-        if (type == 20) [self handleHeader:part];
-        else if (type == 21) [self handleMedia:part];
-        else if (type == 22) [self finishHeader:part];
-        else if (type == 35) [self handlePolicy:part];
-        else if (type == 42) [self handleInitialization:part];
-        else if (type == 43) [self handleRedirect:part];
-        else if (type == 46) {
-            NSData *params = YTKACEPBDataField(part, 1);
-            reloadToken = YTKACEPBStringField(params, 1);
-        }
-        else if (type == 44) {
-            rejected = YES;
-            rejectionType = YTKACEPBStringField(part, 1);
-            rejectionCode = (NSInteger)YTKACEPBIntegerField(part, 2, 0);
-            YTKACEDownloadLog(self.identifier, @"SABR error type=%@ code=%ld data=%@",
-                rejectionType ?: @"unknown", (long)rejectionCode,
-                YTKACESABRHex(part, 64));
-        }
-        else if (type == 47 && size <= 8) terminalMarker = YES;
-        else if (type == 57) [self handleContext:part];
-        else if (type == 58) {
-            protectionStatus = (NSInteger)YTKACEPBIntegerField(part, 1, 0);
-            protectionRetries = (NSInteger)YTKACEPBIntegerField(part, 2, 0);
-            attestation = protectionStatus >= 3;
-            YTKACEDownloadLog(self.identifier,
-                @"protection status=%ld retries=%ld data=%@", (long)protectionStatus,
-                (long)protectionRetries, YTKACESABRHex(part, 64));
+        @autoreleasepool {
+            uint32_t type = 0;
+            uint32_t size = 0;
+            if (!YTKACEUMPValue(response, &offset, &type) ||
+                !YTKACEUMPValue(response, &offset, &size) || offset + size > response.length) {
+                [self retryOrFail:[self error:@"YouTube returned an incomplete SABR response." code:5]];
+                return;
+            }
+            NSData *part = [response subdataWithRange:NSMakeRange(offset, size)];
+            offset += size;
+            NSNumber *partType = @(type);
+            partCounts[partType] = @([partCounts[partType] unsignedIntegerValue] + 1);
+            partBytes[partType] = @([partBytes[partType] unsignedLongLongValue] + size);
+            if (self.requestNumber <= 1 && (type == 46 || type == 51)) {
+                YTKACEDownloadLog(self.identifier, @"directive type=%u data=%@", type,
+                    [part base64EncodedStringWithOptions:0]);
+            }
+            if (type == 20) [self handleHeader:part];
+            else if (type == 21) [self handleMedia:part];
+            else if (type == 22) [self finishHeader:part];
+            else if (type == 35) [self handlePolicy:part];
+            else if (type == 42) [self handleInitialization:part];
+            else if (type == 43) [self handleRedirect:part];
+            else if (type == 46) {
+                NSData *params = YTKACEPBDataField(part, 1);
+                reloadToken = YTKACEPBStringField(params, 1);
+            }
+            else if (type == 44) {
+                rejected = YES;
+                rejectionType = YTKACEPBStringField(part, 1);
+                rejectionCode = (NSInteger)YTKACEPBIntegerField(part, 2, 0);
+                YTKACEDownloadLog(self.identifier, @"SABR error type=%@ code=%ld data=%@",
+                    rejectionType ?: @"unknown", (long)rejectionCode,
+                    YTKACESABRHex(part, 64));
+            }
+            else if (type == 47 && size <= 8) terminalMarker = YES;
+            else if (type == 57) [self handleContext:part];
+            else if (type == 58) {
+                protectionStatus = (NSInteger)YTKACEPBIntegerField(part, 1, 0);
+                protectionRetries = (NSInteger)YTKACEPBIntegerField(part, 2, 0);
+                attestation = protectionStatus >= 3;
+                YTKACEDownloadLog(self.identifier,
+                    @"protection status=%ld retries=%ld data=%@", (long)protectionStatus,
+                    (long)protectionRetries, YTKACESABRHex(part, 64));
+            }
         }
     }
     NSMutableArray<NSString *> *partSummary = [NSMutableArray array];
@@ -1438,7 +1440,7 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     NSTimeInterval delay = MAX(self.backoffMilliseconds, 0) / 1000.0;
     self.backoffMilliseconds = 0;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
-        dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ [self sendRequest]; });
+        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ [self sendRequest]; });
 }
 
 - (BOOL)restartStalledSession:(NSString *)reason {
@@ -1458,7 +1460,7 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
         (double)self.audio.downloadedDuration, self.audio.endTime,
         (double)self.video.downloadedDuration, self.video.endTime);
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
-        dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ [self sendRequest]; });
+        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ [self sendRequest]; });
     return YES;
 }
 
@@ -1478,7 +1480,7 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
         self.mediaPhase == 1 ? @"audio" : @"video", reason ?: @"unknown",
         self.audio.downloadedBytes, self.video.downloadedBytes);
     [self sendProgress];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         [self sendRequest];
     });
     return YES;

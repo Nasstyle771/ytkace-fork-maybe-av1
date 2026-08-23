@@ -9,6 +9,34 @@
 #import <string.h>
 
 @implementation YTKACEStreamOption
+
+- (BOOL)isAV1 {
+    NSString *mime = self.mimeType.lowercaseString;
+    return [mime containsString:@"av01"] || [mime containsString:@"av1"];
+}
+
+- (BOOL)isH264 {
+    NSString *mime = self.mimeType.lowercaseString;
+    return [mime containsString:@"avc1"] || [mime containsString:@"h264"] || [mime containsString:@"mp4v"];
+}
+
+- (BOOL)isVP9 {
+    NSString *mime = self.mimeType.lowercaseString;
+    return [mime containsString:@"vp09"] || [mime containsString:@"vp9"];
+}
+
+- (NSString *)codecLabel {
+    if (_codecLabel.length != 0) return _codecLabel;
+    if (self.isAV1) return @"AV1";
+    if (self.isH264) return @"H.264";
+    if (self.isVP9) return @"VP9";
+    NSString *mime = self.mimeType.lowercaseString;
+    if ([mime containsString:@"hevc"] || [mime containsString:@"hvc1"] || [mime containsString:@"hev1"]) {
+        return @"HEVC";
+    }
+    return @"MP4";
+}
+
 @end
 
 static id YTKACEStreamObject(id receiver, NSArray<NSString *> *selectors) {
@@ -108,22 +136,8 @@ static NSInteger YTKACEVideoPreference(YTKACEStreamOption *option) {
 }
 
 static BOOL YTKACEHighResolutionSupported(YTKACEStreamOption *option) {
-    if (option.height <= 1080) return YES;
-    NSString *mime = option.mimeType.lowercaseString;
-    if ([mime containsString:@"av01"] || [mime containsString:@"av1"]) {
-        return VTIsHardwareDecodeSupported('av01');
-    }
-    if ([mime containsString:@"vp09"] || [mime containsString:@"vp9"]) {
-        return VTIsHardwareDecodeSupported('vp09');
-    }
-    if ([mime containsString:@"hvc1"] || [mime containsString:@"hev1"] ||
-        [mime containsString:@"hevc"]) {
-        return VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
-    }
-    if ([mime containsString:@"avc1"] || [mime containsString:@"h264"]) {
-        return VTIsHardwareDecodeSupported(kCMVideoCodecType_H264);
-    }
-    return NO;
+    (void)option;
+    return YES;
 }
 
 static id YTKACEPlayerData(id playerResponse) {
@@ -233,7 +247,7 @@ static YTKACEStreamOption *YTKACEOptionFromFormat(id format, BOOL adaptive) {
 
 + (NSArray<YTKACEStreamOption *> *)videoOptionsFromPlayerResponse:(id)playerResponse {
     NSArray *options = [self optionsFromPlayerResponse:playerResponse];
-    NSMutableDictionary<NSString *, YTKACEStreamOption *> *byQuality =
+    NSMutableDictionary<NSString *, YTKACEStreamOption *> *byQualityAndCodec =
         [NSMutableDictionary dictionary];
     for (YTKACEStreamOption *option in options) {
         if (![option.mimeType hasPrefix:@"video/"] || option.itag <= 0) {
@@ -249,28 +263,25 @@ static YTKACEStreamOption *YTKACEOptionFromFormat(id format, BOOL adaptive) {
         }
         if (option.height <= 0) continue;
         if (!YTKACEHighResolutionSupported(option)) continue;
-        NSString *plainLabel = [option.qualityLabel.lowercaseString
-            stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if ([plainLabel isEqualToString:@"1440p"] ||
-            [plainLabel isEqualToString:@"2160p"]) {
-            continue;
-        }
-        NSString *key = option.qualityLabel.length != 0
-            ? option.qualityLabel : [NSString stringWithFormat:@"%ldp", (long)option.height];
-        YTKACEStreamOption *current = byQuality[key];
-        NSInteger preference = YTKACEVideoPreference(option);
-        NSInteger currentPreference = YTKACEVideoPreference(current);
-        if (current == nil || preference > currentPreference ||
-            (preference == currentPreference && option.bitrate > current.bitrate)) {
-            byQuality[key] = option;
+
+        NSString *codec = option.codecLabel ?: @"Video";
+        NSString *key = [NSString stringWithFormat:@"%ldp-%@", (long)option.height, codec];
+        YTKACEStreamOption *current = byQualityAndCodec[key];
+        if (current == nil || option.bitrate > current.bitrate) {
+            byQualityAndCodec[key] = option;
         }
     }
-    return [byQuality.allValues sortedArrayUsingComparator:
+    return [byQualityAndCodec.allValues sortedArrayUsingComparator:
         ^NSComparisonResult(YTKACEStreamOption *left, YTKACEStreamOption *right) {
-            if (left.height == right.height) {
-                return left.bitrate > right.bitrate ? NSOrderedAscending : NSOrderedDescending;
+            if (left.height != right.height) {
+                return left.height > right.height ? NSOrderedAscending : NSOrderedDescending;
             }
-            return left.height > right.height ? NSOrderedAscending : NSOrderedDescending;
+            NSInteger leftPref = left.isH264 ? 3 : (left.isAV1 ? 2 : (left.isVP9 ? 1 : 0));
+            NSInteger rightPref = right.isH264 ? 3 : (right.isAV1 ? 2 : (right.isVP9 ? 1 : 0));
+            if (leftPref != rightPref) {
+                return leftPref > rightPref ? NSOrderedAscending : NSOrderedDescending;
+            }
+            return left.bitrate > right.bitrate ? NSOrderedAscending : NSOrderedDescending;
         }];
 }
 

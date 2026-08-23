@@ -6,6 +6,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, strong, nullable) NSURL *URL;
 @property(nonatomic, copy) NSString *mimeType;
 @property(nonatomic, copy) NSString *qualityLabel;
+@property(nonatomic, copy) NSString *codecLabel;
 @property(nonatomic, copy) NSString *languageLabel;
 @property(nonatomic, copy) NSString *audioTrackID;
 @property(nonatomic, copy) NSString *xtags;
@@ -18,6 +19,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, assign, getter=isAudioOnly) BOOL audioOnly;
 @property(nonatomic, assign, getter=isAdaptive) BOOL adaptive;
 @property(nonatomic, assign, getter=isDefaultAudio) BOOL defaultAudio;
+@property(nonatomic, assign, readonly) BOOL isAV1;
+@property(nonatomic, assign, readonly) BOOL isH264;
+@property(nonatomic, assign, readonly) BOOL isVP9;
 @property(nonatomic, strong) id rawFormat;
 @end
 

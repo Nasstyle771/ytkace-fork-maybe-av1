@@ -121,7 +121,7 @@ static NSData *YTKACEJPEGData(NSURL *URL) {
 + (void)importURLs:(NSArray<NSURL *> *)URLs
           category:(NSString *)category
         completion:(YTKACEMediaImportCompletion)completion {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         BOOL audioCategory = [category isEqualToString:@"Audio"];
         NSSet *mediaExtensions = audioCategory
             ? YTKACEAudioExtensions() : YTKACEVideoExtensions();
