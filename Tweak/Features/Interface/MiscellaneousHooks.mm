@@ -604,6 +604,29 @@ static void YTKACEDiscoverMiscHooks(void) {
     });
 }
 
+static IMP OriginalConfirmDialogViewWillAppear;
+
+static void YTKACEConfirmDialogViewWillAppear(UIViewController *receiver, SEL selector, BOOL animated) {
+    if (OriginalConfirmDialogViewWillAppear != NULL) {
+        ((void (*)(id, SEL, BOOL))OriginalConfirmDialogViewWillAppear)(receiver, selector, animated);
+    }
+    if (!YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.AutoDismissPausedPrompt")) return;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *desc = receiver.description.lowercaseString;
+        if ([desc containsString:@"paused"] || [desc containsString:@"confirm"] ||
+            [desc containsString:@"dialog"] || [desc containsString:@"watching"]) {
+            SEL confirmSel = NSSelectorFromString(@"confirmButtonTapped:");
+            SEL okSel = NSSelectorFromString(@"didTapConfirm:");
+            if ([receiver respondsToSelector:confirmSel]) {
+                ((void (*)(id, SEL, id))objc_msgSend)(receiver, confirmSel, nil);
+            } else if ([receiver respondsToSelector:okSel]) {
+                ((void (*)(id, SEL, id))objc_msgSend)(receiver, okSel, nil);
+            }
+        }
+    });
+}
+
 void YTKACEInstallMiscellaneousHooks(void) {
     if (YTKACEMiscOriginals == nil) {
         YTKACEMiscOriginals = [NSMutableDictionary dictionary];
@@ -643,29 +666,6 @@ void YTKACEInstallMiscellaneousHooks(void) {
             YTKACEInstallMiscBool(className, selectorName, (IMP)YTKACEMiniPlayerValue);
         }
     }
-
-static IMP OriginalConfirmDialogViewWillAppear;
-
-static void YTKACEConfirmDialogViewWillAppear(UIViewController *receiver, SEL selector, BOOL animated) {
-    if (OriginalConfirmDialogViewWillAppear != NULL) {
-        ((void (*)(id, SEL, BOOL))OriginalConfirmDialogViewWillAppear)(receiver, selector, animated);
-    }
-    if (!YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.AutoDismissPausedPrompt")) return;
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *desc = receiver.description.lowercaseString;
-        if ([desc containsString:@"paused"] || [desc containsString:@"confirm"] ||
-            [desc containsString:@"dialog"] || [desc containsString:@"watching"]) {
-            SEL confirmSel = NSSelectorFromString(@"confirmButtonTapped:");
-            SEL okSel = NSSelectorFromString(@"didTapConfirm:");
-            if ([receiver respondsToSelector:confirmSel]) {
-                ((void (*)(id, SEL, id))objc_msgSend)(receiver, confirmSel, nil);
-            } else if ([receiver respondsToSelector:okSel]) {
-                ((void (*)(id, SEL, id))objc_msgSend)(receiver, okSel, nil);
-            }
-        }
-    });
-}
 
     for (NSString *className in @[@"YTIPlayabilityStatus", @"YTPlayerResponse"] ) {
         for (NSString *selectorName in @[
