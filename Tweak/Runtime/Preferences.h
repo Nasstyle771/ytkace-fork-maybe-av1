@@ -16,6 +16,10 @@ FOUNDATION_EXPORT NSString * const YTKACELoopKey;
 FOUNDATION_EXPORT NSString * const YTKACESleepTimerKey;
 FOUNDATION_EXPORT NSString * const YTKACEAccentPresetKey;
 FOUNDATION_EXPORT NSString * const YTKACEAccentHexKey;
+FOUNDATION_EXPORT NSString * const YTKACEThemePresetKey;
+FOUNDATION_EXPORT NSString * const YTKACEThemeTopHexKey;
+FOUNDATION_EXPORT NSString * const YTKACEThemeBottomHexKey;
+FOUNDATION_EXPORT NSString * const YTKACEForce120HzKey;
 FOUNDATION_EXPORT NSString * const YTKACELockAV1Key;
 FOUNDATION_EXPORT NSString * const YTKACEPreferredCodecKey;
 FOUNDATION_EXPORT NSString * const YTKACEPreferencesDidChangeNotification;
@@ -28,7 +32,15 @@ FOUNDATION_EXPORT UIColor *YTKACEInterfaceBackgroundColor(
     UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEInterfaceSurfaceColor(
     UITraitCollection * _Nullable traits);
+FOUNDATION_EXPORT UIColor *YTKACEThemeTopColor(void);
+FOUNDATION_EXPORT UIColor *YTKACEThemeBottomColor(void);
+FOUNDATION_EXPORT UIColor *YTKACEThemeBackgroundColor(
+    UITraitCollection * _Nullable traits);
+FOUNDATION_EXPORT UIColor *YTKACEThemeSurfaceColor(
+    UITraitCollection * _Nullable traits);
+FOUNDATION_EXPORT UIImage * _Nullable YTKACEThemeGradientImage(CGSize size);
 FOUNDATION_EXPORT UIColor *YTKACEAppAccentColor(void);
+FOUNDATION_EXPORT UIColor *YTKACEColorFromHex(NSString *hex, UIColor * _Nullable fallback);
 FOUNDATION_EXPORT BOOL YTKACESponsorBlockEnabled(void);
 FOUNDATION_EXPORT void YTKACESetPreference(NSString *key, BOOL enabled);
 FOUNDATION_EXPORT id _Nullable YTKACEPreferenceObject(NSString *key);

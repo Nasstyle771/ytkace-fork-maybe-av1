@@ -40,7 +40,15 @@ static UIColor *YTKACEOLEDColor(id receiver, SEL selector) {
     if (!YTKACEFeatureEnabled(YTKACEOLEDKey)) return base;
     __weak id weakReceiver = receiver;
     return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        if (YTKACEOLEDActive(traits)) return UIColor.blackColor;
+        if (YTKACEOLEDActive(traits)) {
+            NSString *sel = NSStringFromSelector(selector);
+            if ([sel containsString:@"menu"] || [sel containsString:@"dialog"] ||
+                [sel containsString:@"elevated"] || [sel containsString:@"raised"] ||
+                [sel containsString:@"Surface"] || [sel containsString:@"Container"]) {
+                return YTKACEThemeSurfaceColor(traits);
+            }
+            return YTKACEThemeBackgroundColor(traits);
+        }
         id target = weakReceiver;
         UIColor *current = target == nil || original == NULL
             ? base
@@ -197,16 +205,17 @@ static UIView *YTKACECommonAncestor(NSArray<UIView *> *views, UIView *limit) {
 }
 
 static void YTKACEBlackenQualitySurface(UIView *view) {
+    UIColor *surfaceColor = YTKACEThemeSurfaceColor(nil);
     if ([view isKindOfClass:UIVisualEffectView.class]) {
         UIVisualEffectView *effect = (UIVisualEffectView *)view;
         effect.effect = nil;
-        effect.contentView.backgroundColor = UIColor.blackColor;
+        effect.contentView.backgroundColor = surfaceColor;
     }
     UIColor *background = view.backgroundColor;
     CGFloat alpha = background == nil ? 0.0 : CGColorGetAlpha(background.CGColor);
     if (alpha > 0.01 || [view isKindOfClass:UITableView.class] ||
         [view isKindOfClass:UICollectionView.class]) {
-        view.backgroundColor = UIColor.blackColor;
+        view.backgroundColor = surfaceColor;
     }
     if ([view isKindOfClass:UILabel.class]) {
         ((UILabel *)view).textColor = UIColor.whiteColor;

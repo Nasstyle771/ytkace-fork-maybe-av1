@@ -1,4 +1,5 @@
 #import "YTKACE.h"
+#import "Features/Appearance/DisplayRateHooks.h"
 #import "Features/Downloads/DownloadLog.h"
 #import "Features/SponsorBlock/DeArrow.h"
 #import "Runtime/Preferences.h"
@@ -12,6 +13,7 @@
 NSString * const YTKACEVersion = @"0.9.0";
 
 static void YTKACEInstallModules(void) {
+    YTKACEInstallDisplayRateHooks();
     YTKACEInstallSideloadCompatibilityHooks();
     YTKACEInstallCastCompatibilityHooks();
     YTKACEInstallAdsHooks();

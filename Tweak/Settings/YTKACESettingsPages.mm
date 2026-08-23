@@ -1505,7 +1505,16 @@ static NSDictionary *YTKACEMiscOptionsDefinition(void) {
                          @"Removes playable games from the feed.", @"")
         ],
         @[
-            YTKACEToggle(@"OLED Black", YTKACEOLEDKey, @"", @""),
+            YTKACEToggleDetail(@"Unlock Full 120Hz ProMotion",
+                               @"Locks UI, scrolling, and gestures to unthrottled 120 FPS on ProMotion iPhones.",
+                               YTKACEForce120HzKey),
+            YTKACEToggle(@"Custom Dark / OLED Theme", YTKACEOLEDKey, @"", @""),
+            YTKACEPicker(@"Background Theme",
+                         YTKACEThemePresetKey,
+                         @[@"OLED Pure Black", @"Midnight Crimson", @"Cyberpunk Neon", @"Emerald Abyss", @"Sunset Ember", @"Nebula Violet", @"Deep Ocean Blue", @"Custom Gradient"],
+                         @[@0, @1, @2, @3, @4, @5, @6, @7], 0, @"", @""),
+            YTKACEColor(@"Top Gradient Color", YTKACEThemeTopHexKey, @"#000000"),
+            YTKACEColor(@"Bottom Gradient Color", YTKACEThemeBottomHexKey, @"#36020A"),
             YTKACEPicker(@"Theme Accent Color",
                          YTKACEAccentPresetKey,
                          @[@"YouTube Red", @"Neon Blue", @"Cyberpunk Purple", @"Emerald Green", @"Sunset Orange", @"Rose Pink", @"OLED Crimson", @"Pure White", @"Custom Color"],
