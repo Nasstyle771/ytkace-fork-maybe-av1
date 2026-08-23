@@ -1175,6 +1175,11 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
         [YTKACEDownloadProgressView.sharedView finishJob:job.identifier
             success:YES message:YTKACELocalized(@"Complete")];
         YTKACEDownloadLog(job.identifier, @"saved path=%@", destination.path);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            UINotificationFeedbackGenerator *generator = [[UINotificationFeedbackGenerator alloc] init];
+            [generator prepare];
+            [generator notificationOccurred:UINotificationFeedbackTypeSuccess];
+        });
         [NSNotificationCenter.defaultCenter
             postNotificationName:@"YTKACEDownloadLibraryChanged" object:nil];
     }

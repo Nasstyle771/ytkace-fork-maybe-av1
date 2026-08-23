@@ -1350,6 +1350,15 @@ static NSDictionary *YTKACEPlayerControlsDefinition(void) {
                 @"Helps recover playback in sideloaded builds.",
                 @"YTKACE.Preference.Playback.Recovery")
         ],
+        @[
+            YTKACEToggleDetail(@"Lock Codecs to AV1",
+                @"Strictly download only AV1 streams when available.",
+                YTKACELockAV1Key),
+            YTKACEPicker(@"Preferred Video Codec",
+                         YTKACEPreferredCodecKey,
+                         @[@"All Codecs (Default)", @"AV1 Only", @"H.264 Only", @"Prioritize AV1", @"Prioritize H.264"],
+                         @[@0, @1, @2, @3, @4], 0, @"", @"")
+        ],
         progressSection,
         @[
             YTKACEActionDetail(@"Back Up", @"Save settings and media to a ZIP file.", backup),
@@ -1360,7 +1369,7 @@ static NSDictionary *YTKACEPlayerControlsDefinition(void) {
             YTKACEPicker(@"Clear Cache at Launch", @"YTKACE.Preference.Downloads.ClearOnStartup", @[@"Off", @"On"], @[@NO, @YES], 0, @"", @""),
             YTKACEActionDetail(@"Clear Cache Now", @"Delete temporary download files.", clearCache)
         ]
-    ], @[YTKACELocalized(@"BUTTONS"), YTKACELocalized(@"SPEED"), YTKACELocalized(@"PLAYBACK"), YTKACELocalized(@"PROGRESS BAR"), YTKACELocalized(@"FILES"), YTKACELocalized(@"STORAGE")]);
+    ], @[YTKACELocalized(@"BUTTONS"), YTKACELocalized(@"SPEED"), YTKACELocalized(@"PLAYBACK"), YTKACELocalized(@"DOWNLOAD CODECS"), YTKACELocalized(@"PROGRESS BAR"), YTKACELocalized(@"FILES"), YTKACELocalized(@"STORAGE")]);
 }
 
 UIViewController *YTKACEMakeTabBarOptionsController(void) {
@@ -1497,6 +1506,11 @@ static NSDictionary *YTKACEMiscOptionsDefinition(void) {
         ],
         @[
             YTKACEToggle(@"OLED Black", YTKACEOLEDKey, @"", @""),
+            YTKACEPicker(@"Theme Accent Color",
+                         YTKACEAccentPresetKey,
+                         @[@"YouTube Red", @"Neon Blue", @"Cyberpunk Purple", @"Emerald Green", @"Sunset Orange", @"Rose Pink", @"OLED Crimson", @"Pure White", @"Custom Color"],
+                         @[@0, @1, @2, @3, @4, @5, @6, @7, @8], 0, @"", @""),
+            YTKACEColor(@"Custom Accent Color", YTKACEAccentHexKey, @"#FF0033"),
             YTKACEToggle(@"Skip Launch Animation", @"YTKACE.Preference.Appearance.LaunchAnimationDisabled",
                          @"Starts YouTube faster", @"")
         ],

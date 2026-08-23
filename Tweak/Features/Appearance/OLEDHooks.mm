@@ -101,6 +101,42 @@ static void YTKACEAppTraitChanged(UIViewController *receiver,
     });
 }
 
+static UIColor *YTKACEAccentColorHook(id receiver, SEL selector) {
+    NSInteger preset = [NSUserDefaults.standardUserDefaults integerForKey:YTKACEAccentPresetKey];
+    if (preset > 0) {
+        return YTKACEAppAccentColor();
+    }
+    IMP original = YTKACEOLEDImplementation(
+        YTKACEOLEDOriginals[YTKACEOLEDOriginalKey(receiver, selector)]
+    );
+    return original == NULL ? YTKACEAppAccentColor() : ((id (*)(id, SEL))original)(receiver, selector);
+}
+
+static void YTKACEInstallAccentHook(NSString *className,
+                                    NSString *selectorName,
+                                    BOOL classMethod) {
+    IMP original = NULL;
+    BOOL installed = classMethod
+        ? YTKACEInstallClassHook(className,
+                                selectorName,
+                                (IMP)YTKACEAccentColorHook,
+                                &original)
+        : YTKACEInstallInstanceHook(className,
+                                   selectorName,
+                                   (IMP)YTKACEAccentColorHook,
+                                   &original);
+    if (!installed || original == NULL) {
+        return;
+    }
+    NSString *key = [NSString stringWithFormat:@"%@|%@|%@",
+                     classMethod ? @"+" : @"-",
+                     className,
+                     selectorName];
+    if (YTKACEOLEDOriginals[key] == nil) {
+        YTKACEOLEDOriginals[key] = YTKACEOLEDValue(original);
+    }
+}
+
 static void YTKACEInstallColorHook(NSString *className,
                                    NSString *selectorName,
                                    BOOL classMethod) {
@@ -246,6 +282,14 @@ void YTKACEInstallOLEDHooks(void) {
     for (NSString *selector in paletteSelectors) {
         YTKACEInstallColorHook(@"YTCommonColorPalette", selector, NO);
         YTKACEInstallColorHook(@"YTCommonColorPalette", selector, YES);
+    }
+
+    for (NSString *selector in @[@"brandRed", @"red0", @"red1", @"red2"]) {
+        YTKACEInstallAccentHook(@"YTColor", selector, YES);
+    }
+    for (NSString *selector in @[@"brandRed", @"callToAction", @"brandButton", @"brandIconActive"]) {
+        YTKACEInstallAccentHook(@"YTCommonColorPalette", selector, NO);
+        YTKACEInstallAccentHook(@"YTCommonColorPalette", selector, YES);
     }
 
     YTKACEInstallInstanceHook(@"YTActionSheetDialogViewController",

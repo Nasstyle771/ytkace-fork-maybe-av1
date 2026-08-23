@@ -14,6 +14,10 @@ FOUNDATION_EXPORT NSString * const YTKACEPiPKey;
 FOUNDATION_EXPORT NSString * const YTKACESpeedKey;
 FOUNDATION_EXPORT NSString * const YTKACELoopKey;
 FOUNDATION_EXPORT NSString * const YTKACESleepTimerKey;
+FOUNDATION_EXPORT NSString * const YTKACEAccentPresetKey;
+FOUNDATION_EXPORT NSString * const YTKACEAccentHexKey;
+FOUNDATION_EXPORT NSString * const YTKACELockAV1Key;
+FOUNDATION_EXPORT NSString * const YTKACEPreferredCodecKey;
 FOUNDATION_EXPORT NSString * const YTKACEPreferencesDidChangeNotification;
 
 FOUNDATION_EXPORT void YTKACERegisterDefaults(void);
@@ -24,6 +28,7 @@ FOUNDATION_EXPORT UIColor *YTKACEInterfaceBackgroundColor(
     UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEInterfaceSurfaceColor(
     UITraitCollection * _Nullable traits);
+FOUNDATION_EXPORT UIColor *YTKACEAppAccentColor(void);
 FOUNDATION_EXPORT BOOL YTKACESponsorBlockEnabled(void);
 FOUNDATION_EXPORT void YTKACESetPreference(NSString *key, BOOL enabled);
 FOUNDATION_EXPORT id _Nullable YTKACEPreferenceObject(NSString *key);

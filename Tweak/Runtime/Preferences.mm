@@ -14,6 +14,10 @@ NSString * const YTKACEPiPKey = @"YTKACE.Preference.Player.PiP";
 NSString * const YTKACESpeedKey = @"YTKACE.Preference.Player.SpeedControls";
 NSString * const YTKACELoopKey = @"YTKACE.Preference.Player.Loop";
 NSString * const YTKACESleepTimerKey = @"YTKACE.Preference.Player.SleepTimer";
+NSString * const YTKACEAccentPresetKey = @"YTKACE.Preference.Appearance.AccentPreset";
+NSString * const YTKACEAccentHexKey = @"YTKACE.Preference.Appearance.CustomAccentHex";
+NSString * const YTKACELockAV1Key = @"YTKACE.Preference.Downloads.LockAV1";
+NSString * const YTKACEPreferredCodecKey = @"YTKACE.Preference.Downloads.PreferredCodec";
 NSString * const YTKACEPreferencesDidChangeNotification =
     @"YTKACEPreferencesDidChangeNotification";
 
@@ -105,6 +109,10 @@ void YTKACERegisterDefaults(void) {
         @"YTKACE.Preference.SponsorBlock.SkipAlertSeconds": @4.0,
         @"YTKACE.Preference.SponsorBlock.UnskipAlertSeconds": @4.0,
         @"YTKACE.Preference.Downloads.ClearOnStartup": @NO,
+        YTKACEAccentPresetKey: @0,
+        YTKACEAccentHexKey: @"#FF0033",
+        YTKACELockAV1Key: @NO,
+        YTKACEPreferredCodecKey: @0,
         @"YTKACE.Preference.Tabs.Hidden.Create": @YES,
         @"YTKACE.Preference.Tabs.Hidden.Music": @YES,
         @"YTKACE.Preference.Tabs.Hidden.Live": @YES,
@@ -220,6 +228,36 @@ UIColor *YTKACEInterfaceSurfaceColor(UITraitCollection *traits) {
     return style == UIUserInterfaceStyleDark
         ? [UIColor colorWithWhite:0.16 alpha:1.0]
         : [UIColor colorWithWhite:0.95 alpha:1.0];
+}
+
+UIColor *YTKACEAppAccentColor(void) {
+    NSInteger preset = [YTKACEDefaults() integerForKey:YTKACEAccentPresetKey];
+    switch (preset) {
+        case 1: return [UIColor colorWithRed:0.0 green:0.533 blue:1.0 alpha:1.0]; // Neon Blue
+        case 2: return [UIColor colorWithRed:0.60 green:0.20 blue:1.0 alpha:1.0]; // Purple
+        case 3: return [UIColor colorWithRed:0.0 green:0.80 blue:0.40 alpha:1.0]; // Green
+        case 4: return [UIColor colorWithRed:1.0 green:0.40 blue:0.0 alpha:1.0]; // Orange
+        case 5: return [UIColor colorWithRed:1.0 green:0.20 blue:0.533 alpha:1.0]; // Pink
+        case 6: return [UIColor colorWithRed:0.90 green:0.0 blue:0.0 alpha:1.0]; // Crimson
+        case 7: return [UIColor colorWithWhite:0.95 alpha:1.0]; // White
+        case 8: {
+            NSString *hex = [YTKACEDefaults() stringForKey:YTKACEAccentHexKey];
+            if (hex.length != 0) {
+                NSString *clean = [[hex stringByReplacingOccurrencesOfString:@"#" withString:@""] uppercaseString];
+                if (clean.length == 6) {
+                    unsigned int rgb = 0;
+                    [[NSScanner scannerWithString:clean] scanHexInt:&rgb];
+                    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                                           green:((rgb >> 8) & 0xFF) / 255.0
+                                            blue:(rgb & 0xFF) / 255.0
+                                           alpha:1.0];
+                }
+            }
+            break;
+        }
+        default: break;
+    }
+    return [UIColor colorWithRed:0.749 green:0.0 blue:0.075 alpha:1.0];
 }
 
 BOOL YTKACESponsorBlockEnabled(void) {

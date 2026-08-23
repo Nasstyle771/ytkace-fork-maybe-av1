@@ -93,6 +93,8 @@ UIImage *YTKACEDownloadTabImage(BOOL selected) {
         ? @"arrow.down.square.fill" : @"arrow.down.square"];
 }
 
+#import "../Runtime/Preferences.h"
+
 UIColor *YTKACEAccentColor(void) {
-    return [UIColor colorWithRed:0.749 green:0.0 blue:0.075 alpha:1.0];
+    return YTKACEAppAccentColor();
 }

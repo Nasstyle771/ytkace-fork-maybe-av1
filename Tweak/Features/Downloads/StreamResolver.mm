@@ -1,5 +1,6 @@
 #import "StreamResolver.h"
 #import "../../Runtime/Localization.h"
+#import "../../Runtime/Preferences.h"
 
 #import <UIKit/UIKit.h>
 #import <VideoToolbox/VideoToolbox.h>
@@ -129,9 +130,21 @@ static NSInteger YTKACEQualityHeight(NSString *label) {
 }
 
 static NSInteger YTKACEVideoPreference(YTKACEStreamOption *option) {
-    if (option.isH264) return 3;
-    if (option.isAV1) return 2;
-    if (option.isVP9) return 1;
+    BOOL lockAV1 = [NSUserDefaults.standardUserDefaults boolForKey:YTKACELockAV1Key];
+    NSInteger preferredCodec = [NSUserDefaults.standardUserDefaults integerForKey:YTKACEPreferredCodecKey];
+    if (lockAV1 || preferredCodec == 1 || preferredCodec == 3) {
+        if (option.isAV1) return 4;
+        if (option.isH264) return 3;
+        if (option.isVP9) return 2;
+    } else if (preferredCodec == 2 || preferredCodec == 4) {
+        if (option.isH264) return 4;
+        if (option.isAV1) return 3;
+        if (option.isVP9) return 2;
+    } else {
+        if (option.isAV1) return 4;
+        if (option.isH264) return 3;
+        if (option.isVP9) return 2;
+    }
     return 0;
 }
 
@@ -271,7 +284,7 @@ static YTKACEStreamOption *YTKACEOptionFromFormat(id format, BOOL adaptive) {
             byQualityAndCodec[key] = option;
         }
     }
-    return [byQualityAndCodec.allValues sortedArrayUsingComparator:
+    NSArray<YTKACEStreamOption *> *sorted = [byQualityAndCodec.allValues sortedArrayUsingComparator:
         ^NSComparisonResult(YTKACEStreamOption *left, YTKACEStreamOption *right) {
             if (left.height != right.height) {
                 return left.height > right.height ? NSOrderedAscending : NSOrderedDescending;
@@ -283,6 +296,23 @@ static YTKACEStreamOption *YTKACEOptionFromFormat(id format, BOOL adaptive) {
             }
             return left.bitrate > right.bitrate ? NSOrderedAscending : NSOrderedDescending;
         }];
+
+    BOOL lockAV1 = [NSUserDefaults.standardUserDefaults boolForKey:YTKACELockAV1Key];
+    NSInteger preferredCodec = [NSUserDefaults.standardUserDefaults integerForKey:YTKACEPreferredCodecKey];
+    if (lockAV1 || preferredCodec == 1) {
+        NSMutableArray<YTKACEStreamOption *> *av1Only = [NSMutableArray array];
+        for (YTKACEStreamOption *opt in sorted) {
+            if (opt.isAV1) [av1Only addObject:opt];
+        }
+        if (av1Only.count > 0) return av1Only;
+    } else if (preferredCodec == 2) {
+        NSMutableArray<YTKACEStreamOption *> *h264Only = [NSMutableArray array];
+        for (YTKACEStreamOption *opt in sorted) {
+            if (opt.isH264) [h264Only addObject:opt];
+        }
+        if (h264Only.count > 0) return h264Only;
+    }
+    return sorted;
 }
 
 + (NSArray<YTKACEStreamOption *> *)audioOptionsFromPlayerResponse:(id)playerResponse {
