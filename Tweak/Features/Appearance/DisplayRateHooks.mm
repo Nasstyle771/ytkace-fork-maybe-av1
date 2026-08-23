@@ -222,7 +222,7 @@ void YTKACEInstallDisplayRateHooks(void) {
         [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidReceiveMemoryWarningNotification
                                                         object:nil
                                                          queue:NSOperationQueue.mainQueue
-                                                    usingBlock:^(NSNotification *note) {
+                                                    usingBlock:^(__unused NSNotification *note) {
             [NSURLCache.sharedURLCache removeAllCachedResponses];
         }];
     });
