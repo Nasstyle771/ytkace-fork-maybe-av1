@@ -853,18 +853,20 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     }
 
     NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
-    configuration.timeoutIntervalForRequest = 60.0;
-    configuration.timeoutIntervalForResource = 7200.0;
+    configuration.timeoutIntervalForRequest = 25.0;
+    configuration.timeoutIntervalForResource = 3600.0;
     configuration.waitsForConnectivity = YES;
     configuration.allowsCellularAccess = YES;
     configuration.allowsExpensiveNetworkAccess = YES;
     configuration.allowsConstrainedNetworkAccess = YES;
-    configuration.networkServiceType = (NSURLRequestNetworkServiceType)6;
-    configuration.HTTPMaximumConnectionsPerHost = 16;
+    configuration.networkServiceType = NSURLNetworkServiceTypeDefault;
+    configuration.HTTPMaximumConnectionsPerHost = 8;
+    configuration.HTTPShouldUsePipelining = YES;
+    configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
     configuration.shouldUseExtendedBackgroundIdleMode = YES;
     NSOperationQueue *queue = [NSOperationQueue new];
-    queue.maxConcurrentOperationCount = 8;
-    queue.qualityOfService = NSQualityOfServiceUserInitiated;
+    queue.maxConcurrentOperationCount = 4;
+    queue.qualityOfService = NSQualityOfServiceUserInteractive;
     self.session = [NSURLSession sessionWithConfiguration:configuration
         delegate:self delegateQueue:queue];
     NSString *serverHost = [NSURL URLWithString:self.serverURL].host ?: @"unknown";
