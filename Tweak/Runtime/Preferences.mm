@@ -3,6 +3,10 @@
 #import "../Features/Downloads/SABRDownloader.h"
 
 #import <UIKit/UIKit.h>
+#import <os/lock.h>
+
+static NSMutableDictionary<NSString *, id> *s_prefCache = nil;
+static os_unfair_lock s_prefLock = OS_UNFAIR_LOCK_INIT;
 
 NSString * const YTKACEMasterEnabledKey = @"YTKACE.Preference.Enabled";
 NSString * const YTKACEOLEDKey = @"YTKACE.Preference.Appearance.OLED";
@@ -56,7 +60,7 @@ void YTKACERegisterDefaults(void) {
         objectForKey:@"YTKACE.Preference.Gestures.LeftAction"] != nil;
     BOOL hasRightAction = [YTKACEDefaults()
         objectForKey:@"YTKACE.Preference.Gestures.RightAction"] != nil;
-    [YTKACEDefaults() registerDefaults:@{
+    NSDictionary *defaultDict = @{
         YTKACEMasterEnabledKey: @YES,
         YTKACENoAdsKey: @YES,
         YTKACEOLEDKey: @NO,
