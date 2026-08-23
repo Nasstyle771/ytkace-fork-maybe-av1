@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 
-@class UIColor, UITraitCollection;
+@class UIColor, UIImage, UITraitCollection;
 
 NS_ASSUME_NONNULL_BEGIN
 
