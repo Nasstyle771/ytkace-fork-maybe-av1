@@ -1357,7 +1357,10 @@ static NSDictionary *YTKACEPlayerControlsDefinition(void) {
             YTKACEPicker(@"Preferred Video Codec",
                          YTKACEPreferredCodecKey,
                          @[@"All Codecs (Default)", @"AV1 Only", @"H.264 Only", @"Prioritize AV1", @"Prioritize H.264"],
-                         @[@0, @1, @2, @3, @4], 0, @"", @"")
+                         @[@0, @1, @2, @3, @4], 0, @"", @""),
+            YTKACEToggleDetail(@"Auto-Save to Photos",
+                @"Automatically saves completed video downloads directly into your Photos library.",
+                @"YTKACE.Preference.Downloads.AutoSaveToPhotos")
         ],
         progressSection,
         @[
@@ -1433,7 +1436,11 @@ static NSDictionary *YTKACEOverlayOptionsDefinition(void) {
 
 static NSDictionary *YTKACEStreamingOptionsDefinition(void) {
     return YTKACEPageDefinition(@"playback", @"Playback", @[
-        @[YTKACEToggle(@"Old Quality Menu", @"YTKACE.Preference.Playback.LegacyQualityMenu", @"", @"")],
+        @[
+            YTKACEToggle(@"Old Quality Menu", @"YTKACE.Preference.Playback.LegacyQualityMenu", @"", @""),
+            YTKACEToggle(@"Extended Video Buffer", @"YTKACE.Preference.Playback.ExtendedBuffer", @"Preloads up to 2 minutes ahead for instant scrubbing.", @""),
+            YTKACEToggle(@"Disable HDR Playback", @"YTKACE.Preference.Playback.DisableHDR", @"Forces SDR streams to prevent screen blinding in dark rooms.", @"")
+        ],
         @[
             YTKACEToggle(@"Custom Double-Tap Time", @"YTKACE.Preference.Playback.CustomDoubleTap", @"", @""),
             YTKACEStepper(@"Skip Time", @"YTKACE.Preference.Playback.DoubleTapSeconds", 5.0, 60.0, 5.0, 10.0)
@@ -1442,7 +1449,7 @@ static NSDictionary *YTKACEStreamingOptionsDefinition(void) {
             YTKACEToggle(@"Stop Autoplay", @"YTKACE.Preference.Playback.AutoplayDisabled", @"", @""),
             YTKACEToggle(@"HD on Mobile Data", @"YTKACE.Preference.Playback.HDOnCellular", @"", @"")
         ]
-    ], @[YTKACELocalized(@"QUALITY"), YTKACELocalized(@"DOUBLE TAP"), YTKACELocalized(@"AUTOPLAY & DATA")]);
+    ], @[YTKACELocalized(@"QUALITY & BUFFERING"), YTKACELocalized(@"DOUBLE TAP"), YTKACELocalized(@"AUTOPLAY & DATA")]);
 }
 
 static NSDictionary *YTKACENavigationOptionsDefinition(void) {

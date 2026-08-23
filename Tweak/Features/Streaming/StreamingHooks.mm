@@ -2,6 +2,7 @@
 #import "../../Runtime/Hooking.h"
 #import "../../Runtime/Preferences.h"
 
+#import <AVFoundation/AVFoundation.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <SystemConfiguration/SystemConfiguration.h>
@@ -272,6 +273,34 @@ static void YTKACEAutoplaySetter(id receiver, SEL selector, BOOL enabled) {
     }
 }
 
+static BOOL YTKACEFormatIsHDR(id receiver, SEL selector) {
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.DisableHDR")) {
+        return NO;
+    }
+    IMP original = YTKACEStreamingOriginal(receiver, selector);
+    return original != NULL ? ((BOOL (*)(id, SEL))original)(receiver, selector) : NO;
+}
+
+static IMP OriginalPlayerItemSetPreferredForwardBufferDuration;
+static void YTKACEPlayerItemSetPreferredForwardBufferDuration(AVPlayerItem *receiver, SEL selector, NSTimeInterval duration) {
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.ExtendedBuffer")) {
+        duration = MAX(duration, 120.0);
+    }
+    if (OriginalPlayerItemSetPreferredForwardBufferDuration != NULL) {
+        ((void (*)(id, SEL, NSTimeInterval))OriginalPlayerItemSetPreferredForwardBufferDuration)(receiver, selector, duration);
+    }
+}
+
+static IMP OriginalSetCanUseNetworkWhilePaused;
+static void YTKACESetCanUseNetworkWhilePaused(AVPlayerItem *receiver, SEL selector, BOOL allowed) {
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.ExtendedBuffer")) {
+        allowed = YES;
+    }
+    if (OriginalSetCanUseNetworkWhilePaused != NULL) {
+        ((void (*)(id, SEL, BOOL))OriginalSetCanUseNetworkWhilePaused)(receiver, selector, allowed);
+    }
+}
+
 static BOOL YTKACECellularQualityValue(id receiver, SEL selector) {
     if (YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.HDOnCellular")) {
         NSString *name = NSStringFromSelector(selector).lowercaseString;
@@ -421,4 +450,19 @@ void YTKACEInstallStreamingHooks(void) {
                                     (IMP)YTKACECellularQualityValue);
         }
     }
+
+    for (NSString *className in @[@"MLVideoFormat", @"MLFormat3"]) {
+        for (NSString *selectorName in @[@"isHDR", @"isHdr", @"hasHdr"]) {
+            YTKACEInstallBoolGetter(className, selectorName, (IMP)YTKACEFormatIsHDR);
+        }
+    }
+
+    YTKACEInstallInstanceHook(@"AVPlayerItem",
+                              @"setPreferredForwardBufferDuration:",
+                              (IMP)YTKACEPlayerItemSetPreferredForwardBufferDuration,
+                              &OriginalPlayerItemSetPreferredForwardBufferDuration);
+    YTKACEInstallInstanceHook(@"AVPlayerItem",
+                              @"setCanUseNetworkResourcesForLiveStreamingWhilePaused:",
+                              (IMP)YTKACESetCanUseNetworkWhilePaused,
+                              &OriginalSetCanUseNetworkWhilePaused);
 }

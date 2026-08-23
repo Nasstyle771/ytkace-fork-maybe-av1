@@ -1172,6 +1172,25 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
             message:[self failureMessageForError:error job:job]];
     } else {
         [self writeMetadataForJob:job destination:destination];
+        if (YTKACEFeatureEnabled(@"YTKACE.Preference.Downloads.AutoSaveToPhotos") && !job.audioOnly) {
+            [PHPhotoLibrary.sharedPhotoLibrary performChanges:^{
+                PHAssetChangeRequest *request = [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:destination];
+                PHFetchOptions *options = [PHFetchOptions new];
+                options.predicate = [NSPredicate predicateWithFormat:@"title = %@", @"YouTube Downloads"];
+                PHFetchResult *result = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
+                                                                                 subtype:PHAssetCollectionSubtypeAlbumRegular
+                                                                                 options:options];
+                PHAssetCollectionChangeRequest *albumRequest = nil;
+                if (result.count > 0) {
+                    albumRequest = [PHAssetCollectionChangeRequest changeRequestForAssetCollection:result.firstObject];
+                } else {
+                    albumRequest = [PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:@"YouTube Downloads"];
+                }
+                if (albumRequest != nil && request.placeholderForCreatedAsset != nil) {
+                    [albumRequest addAssets:@[request.placeholderForCreatedAsset]];
+                }
+            } completionHandler:nil];
+        }
         [YTKACEDownloadProgressView.sharedView finishJob:job.identifier
             success:YES message:YTKACELocalized(@"Complete")];
         YTKACEDownloadLog(job.identifier, @"saved path=%@", destination.path);

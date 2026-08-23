@@ -512,6 +512,7 @@ static NSData *YTKACESABRClientInfo(void) {
 @property(nonatomic, assign) BOOL nativeRefreshInFlight;
 @property(nonatomic, assign) NSInteger nativeRefreshAttempts;
 @property(nonatomic, assign) NSInteger nativeBuildFailures;
+@property(nonatomic, assign) UIBackgroundTaskIdentifier bgTask;
 - (void)start;
 - (void)cancel;
 - (void)sendPreparedRequest:(NSURLRequest * _Nullable)nativeRequest
@@ -839,17 +840,30 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     }
     self.headers = [NSMutableDictionary dictionary];
     self.contexts = [NSMutableDictionary dictionary];
+    if (self.bgTask == UIBackgroundTaskInvalid || self.bgTask == 0) {
+        __weak YTKACESABRSession *weakSelf = self;
+        self.bgTask = [UIApplication.sharedApplication beginBackgroundTaskWithName:@"YTKACESABRDownload"
+                                                                 expirationHandler:^{
+            YTKACESABRSession *strongSelf = weakSelf;
+            if (strongSelf != nil && strongSelf.bgTask != UIBackgroundTaskInvalid) {
+                [UIApplication.sharedApplication endBackgroundTask:strongSelf.bgTask];
+                strongSelf.bgTask = UIBackgroundTaskInvalid;
+            }
+        }];
+    }
+
     NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
     configuration.timeoutIntervalForRequest = 60.0;
-    configuration.timeoutIntervalForResource = 3600.0;
+    configuration.timeoutIntervalForResource = 7200.0;
     configuration.waitsForConnectivity = YES;
     configuration.allowsCellularAccess = YES;
     configuration.allowsExpensiveNetworkAccess = YES;
     configuration.allowsConstrainedNetworkAccess = YES;
     configuration.networkServiceType = (NSURLRequestNetworkServiceType)6;
-    configuration.HTTPMaximumConnectionsPerHost = 8;
+    configuration.HTTPMaximumConnectionsPerHost = 16;
+    configuration.shouldUseExtendedBackgroundIdleMode = YES;
     NSOperationQueue *queue = [NSOperationQueue new];
-    queue.maxConcurrentOperationCount = 4;
+    queue.maxConcurrentOperationCount = 8;
     queue.qualityOfService = NSQualityOfServiceUserInitiated;
     self.session = [NSURLSession sessionWithConfiguration:configuration
         delegate:self delegateQueue:queue];
@@ -1495,6 +1509,10 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
         return;
     }
     self.finished = YES;
+    if (self.bgTask != UIBackgroundTaskInvalid && self.bgTask != 0) {
+        [UIApplication.sharedApplication endBackgroundTask:self.bgTask];
+        self.bgTask = UIBackgroundTaskInvalid;
+    }
     [self.video.handle closeFile];
     [self.audio.handle closeFile];
     [self.session invalidateAndCancel];
@@ -1508,6 +1526,10 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
 - (void)fail:(NSError *)error {
     if (self.finished) return;
     self.finished = YES;
+    if (self.bgTask != UIBackgroundTaskInvalid && self.bgTask != 0) {
+        [UIApplication.sharedApplication endBackgroundTask:self.bgTask];
+        self.bgTask = UIBackgroundTaskInvalid;
+    }
     [self.video.handle closeFile];
     [self.audio.handle closeFile];
     [self.session invalidateAndCancel];
