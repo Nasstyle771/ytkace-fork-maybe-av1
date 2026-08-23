@@ -30,6 +30,24 @@ static NSString *YTKACEOLEDOriginalKey(id receiver, SEL selector) {
             NSStringFromSelector(selector)];
 }
 
+static NSMutableDictionary<NSString *, UIColor *> *s_dynamicColorCache = nil;
+
+static BOOL YTKACEIsSurfaceSelector(SEL selector) {
+    const char *name = sel_getName(selector);
+    if (name == NULL) return NO;
+    return (strstr(name, "menu") != NULL ||
+            strstr(name, "dialog") != NULL ||
+            strstr(name, "elevated") != NULL ||
+            strstr(name, "raised") != NULL ||
+            strstr(name, "Surface") != NULL ||
+            strstr(name, "Container") != NULL ||
+            strstr(name, "chip") != NULL ||
+            strstr(name, "overlay") != NULL ||
+            strstr(name, "Secondary") != NULL ||
+            strstr(name, "background2") != NULL ||
+            strstr(name, "background3") != NULL);
+}
+
 static UIColor *YTKACEOLEDColor(id receiver, SEL selector) {
     IMP original = YTKACEOLEDImplementation(
         YTKACEOLEDOriginals[YTKACEOLEDOriginalKey(receiver, selector)]
@@ -41,20 +59,22 @@ static UIColor *YTKACEOLEDColor(id receiver, SEL selector) {
     BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
     if (!oledEnabled && preset == 0) return base;
 
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+    NSString *cacheKey = [NSString stringWithFormat:@"%s|%ld|%d", sel_getName(selector), (long)preset, oledEnabled];
+    if (s_dynamicColorCache == nil) {
+        s_dynamicColorCache = [NSMutableDictionary dictionary];
+    }
+    UIColor *cached = s_dynamicColorCache[cacheKey];
+    if (cached != nil) return cached;
+
+    BOOL isSurface = YTKACEIsSurfaceSelector(selector);
+    UIColor *dynamicColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
         if (YTKACEOLEDActive(traits)) {
-            NSString *sel = NSStringFromSelector(selector);
-            if ([sel containsString:@"menu"] || [sel containsString:@"dialog"] ||
-                [sel containsString:@"elevated"] || [sel containsString:@"raised"] ||
-                [sel containsString:@"Surface"] || [sel containsString:@"Container"] ||
-                [sel containsString:@"chip"] || [sel containsString:@"overlay"] ||
-                [sel containsString:@"Secondary"]) {
-                return YTKACEThemeSurfaceColor(traits);
-            }
-            return YTKACEThemeBackgroundColor(traits);
+            return isSurface ? YTKACEThemeSurfaceColor(traits) : YTKACEThemeBackgroundColor(traits);
         }
         return base ?: UIColor.blackColor;
     }];
+    s_dynamicColorCache[cacheKey] = dynamicColor;
+    return dynamicColor;
 }
 
 static void YTKACERefreshStatusBars(UIViewController *controller) {
@@ -326,6 +346,7 @@ void YTKACEInstallOLEDHooks(void) {
                         object:nil
                          queue:NSOperationQueue.mainQueue
                     usingBlock:^(__unused NSNotification *notification) {
+            [s_dynamicColorCache removeAllObjects];
             for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
                 if (![scene isKindOfClass:UIWindowScene.class]) continue;
                 for (UIWindow *window in ((UIWindowScene *)scene).windows) {

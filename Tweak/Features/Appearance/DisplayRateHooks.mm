@@ -73,8 +73,13 @@ static void YTKACELayerSetPreferredFrameRateRange(CALayer *receiver,
                                                  SEL selector,
                                                  CAFrameRateRange range) {
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
-        if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
-            range = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+        NSString *className = NSStringFromClass(receiver.class);
+        BOOL isVideoLayer = [className containsString:@"AVPlayerLayer"] ||
+                            [className containsString:@"AVSampleBufferDisplayLayer"];
+        if (!isVideoLayer) {
+            if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
+                range = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+            }
         }
     }
     if (OriginalLayerSetPreferredFrameRateRange != NULL) {

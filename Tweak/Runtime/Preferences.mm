@@ -277,29 +277,49 @@ UIColor *YTKACEThemeBottomColor(void) {
     }
 }
 
+static UIColor *s_cachedBgColors[8] = {nil};
+static UIColor *s_cachedSurfaceColors[8] = {nil};
+
+void YTKACEClearThemeColorCache(void) {
+    for (int i = 0; i < 8; i++) {
+        s_cachedBgColors[i] = nil;
+        s_cachedSurfaceColors[i] = nil;
+    }
+}
+
 UIColor *YTKACEThemeBackgroundColor(UITraitCollection *traits) {
     if (!YTKACEOLEDActive(traits)) {
         return YTKACEInterfaceBackgroundColor(traits);
     }
     NSInteger preset = [YTKACEDefaults() integerForKey:YTKACEThemePresetKey];
+    if (preset >= 0 && preset < 8 && s_cachedBgColors[preset] != nil) {
+        return s_cachedBgColors[preset];
+    }
+    UIColor *color = nil;
     switch (preset) {
-        case 1: return [UIColor colorWithRed:0.09 green:0.005 blue:0.02 alpha:1.0]; // Crimson Base
-        case 2: return [UIColor colorWithRed:0.07 green:0.02 blue:0.14 alpha:1.0]; // Cyberpunk Base
-        case 3: return [UIColor colorWithRed:0.005 green:0.09 blue:0.04 alpha:1.0]; // Emerald Base
-        case 4: return [UIColor colorWithRed:0.11 green:0.03 blue:0.01 alpha:1.0]; // Sunset Base
-        case 5: return [UIColor colorWithRed:0.08 green:0.01 blue:0.15 alpha:1.0]; // Nebula Base
-        case 6: return [UIColor colorWithRed:0.01 green:0.06 blue:0.17 alpha:1.0]; // Ocean Base
+        case 1: color = [UIColor colorWithRed:0.09 green:0.005 blue:0.02 alpha:1.0]; break;
+        case 2: color = [UIColor colorWithRed:0.07 green:0.02 blue:0.14 alpha:1.0]; break;
+        case 3: color = [UIColor colorWithRed:0.005 green:0.09 blue:0.04 alpha:1.0]; break;
+        case 4: color = [UIColor colorWithRed:0.11 green:0.03 blue:0.01 alpha:1.0]; break;
+        case 5: color = [UIColor colorWithRed:0.08 green:0.01 blue:0.15 alpha:1.0]; break;
+        case 6: color = [UIColor colorWithRed:0.01 green:0.06 blue:0.17 alpha:1.0]; break;
         case 7: {
             UIColor *top = YTKACEThemeTopColor();
             UIColor *bottom = YTKACEThemeBottomColor();
             CGFloat r1, g1, b1, a1, r2, g2, b2, a2;
             if ([top getRed:&r1 green:&g1 blue:&b1 alpha:&a1] && [bottom getRed:&r2 green:&g2 blue:&b2 alpha:&a2]) {
-                return [UIColor colorWithRed:(r1 + r2) * 0.5 green:(g1 + g2) * 0.5 blue:(b1 + b2) * 0.5 alpha:1.0];
+                color = [UIColor colorWithRed:(r1 + r2) * 0.5 green:(g1 + g2) * 0.5 blue:(b1 + b2) * 0.5 alpha:1.0];
+            } else {
+                color = UIColor.blackColor;
             }
-            return UIColor.blackColor;
+            break;
         }
-        default: return UIColor.blackColor;
+        default: color = UIColor.blackColor; break;
     }
+    if (preset >= 0 && preset < 8) {
+        s_cachedBgColors[preset] = color;
+    }
+    return color;
 }
 
 UIColor *YTKACEThemeSurfaceColor(UITraitCollection *traits) {
@@ -307,26 +327,36 @@ UIColor *YTKACEThemeSurfaceColor(UITraitCollection *traits) {
         return YTKACEInterfaceSurfaceColor(traits);
     }
     NSInteger preset = [YTKACEDefaults() integerForKey:YTKACEThemePresetKey];
+    if (preset >= 0 && preset < 8 && s_cachedSurfaceColors[preset] != nil) {
+        return s_cachedSurfaceColors[preset];
+    }
+    UIColor *color = nil;
     switch (preset) {
-        case 1: return [UIColor colorWithRed:0.17 green:0.01 blue:0.04 alpha:1.0]; // Crimson Surface
-        case 2: return [UIColor colorWithRed:0.13 green:0.04 blue:0.27 alpha:1.0]; // Cyberpunk Surface
-        case 3: return [UIColor colorWithRed:0.01 green:0.17 blue:0.08 alpha:1.0]; // Emerald Surface
-        case 4: return [UIColor colorWithRed:0.20 green:0.05 blue:0.02 alpha:1.0]; // Sunset Surface
-        case 5: return [UIColor colorWithRed:0.16 green:0.02 blue:0.28 alpha:1.0]; // Nebula Surface
-        case 6: return [UIColor colorWithRed:0.03 green:0.12 blue:0.30 alpha:1.0]; // Ocean Surface
+        case 1: color = [UIColor colorWithRed:0.17 green:0.01 blue:0.04 alpha:1.0]; break;
+        case 2: color = [UIColor colorWithRed:0.13 green:0.04 blue:0.27 alpha:1.0]; break;
+        case 3: color = [UIColor colorWithRed:0.01 green:0.17 blue:0.08 alpha:1.0]; break;
+        case 4: color = [UIColor colorWithRed:0.20 green:0.05 blue:0.02 alpha:1.0]; break;
+        case 5: color = [UIColor colorWithRed:0.16 green:0.02 blue:0.28 alpha:1.0]; break;
+        case 6: color = [UIColor colorWithRed:0.03 green:0.12 blue:0.30 alpha:1.0]; break;
         case 7: {
             UIColor *bg = YTKACEThemeBackgroundColor(traits);
             CGFloat r, g, b, a;
             if ([bg getRed:&r green:&g blue:&b alpha:&a]) {
-                return [UIColor colorWithRed:MIN(1.0, r * 1.5 + 0.05)
-                                       green:MIN(1.0, g * 1.5 + 0.05)
-                                        blue:MIN(1.0, b * 1.5 + 0.05)
-                                       alpha:1.0];
+                color = [UIColor colorWithRed:MIN(1.0, r * 1.5 + 0.05)
+                                        green:MIN(1.0, g * 1.5 + 0.05)
+                                         blue:MIN(1.0, b * 1.5 + 0.05)
+                                        alpha:1.0];
+            } else {
+                color = [UIColor colorWithWhite:0.12 alpha:1.0];
             }
-            return [UIColor colorWithWhite:0.12 alpha:1.0];
+            break;
         }
-        default: return [UIColor colorWithWhite:0.08 alpha:1.0];
+        default: color = [UIColor colorWithWhite:0.08 alpha:1.0]; break;
     }
+    if (preset >= 0 && preset < 8) {
+        s_cachedSurfaceColors[preset] = color;
+    }
+    return color;
 }
 
 static UIImage *s_cachedGradientImage = nil;
