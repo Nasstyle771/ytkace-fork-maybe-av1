@@ -97,12 +97,41 @@ static void YTKACEAnimationSetPreferredFrameRateRange(CAAnimation *receiver,
     }
 }
 
+static BOOL s_isFeedScrolling = NO;
+static IMP OriginalInlineIsPlaybackAllowed;
+static IMP OriginalMutedIsPlaybackAllowed;
+
+static BOOL YTKACEInlineIsPlaybackAllowed(id receiver, SEL selector) {
+    if (s_isFeedScrolling) return NO;
+    if (OriginalInlineIsPlaybackAllowed != NULL) {
+        return ((BOOL (*)(id, SEL))OriginalInlineIsPlaybackAllowed)(receiver, selector);
+    }
+    return YES;
+}
+
+static BOOL YTKACEMutedIsPlaybackAllowed(id receiver, SEL selector) {
+    if (s_isFeedScrolling) return NO;
+    if (OriginalMutedIsPlaybackAllowed != NULL) {
+        return ((BOOL (*)(id, SEL))OriginalMutedIsPlaybackAllowed)(receiver, selector);
+    }
+    return YES;
+}
+
 static void YTKACESetLayerFrameRateRange(CALayer *layer, CAFrameRateRange range) {
     if (layer == nil) return;
     static SEL setRangeSel = NSSelectorFromString(@"setPreferredFrameRateRange:");
     if ([layer respondsToSelector:setRangeSel]) {
         ((void (*)(id, SEL, CAFrameRateRange))objc_msgSend)(layer, setRangeSel, range);
     }
+}
+
+static IMP OriginalScrollViewSetContentOffset;
+
+static void YTKACEScrollViewSetContentOffset(UIScrollView *receiver, SEL selector, CGPoint offset) {
+    if (OriginalScrollViewSetContentOffset != NULL) {
+        ((void (*)(id, SEL, CGPoint))OriginalScrollViewSetContentOffset)(receiver, selector, offset);
+    }
+    s_isFeedScrolling = receiver.isDragging || receiver.isDecelerating;
 }
 
 static void YTKACEScrollViewDidMoveToWindow(UIScrollView *receiver, SEL selector) {
@@ -112,7 +141,6 @@ static void YTKACEScrollViewDidMoveToWindow(UIScrollView *receiver, SEL selector
     if (receiver.window == nil) return;
 
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
-        receiver.layer.drawsAsynchronously = YES;
         receiver.delaysContentTouches = NO;
         receiver.canCancelContentTouches = YES;
         if ([receiver isKindOfClass:UICollectionView.class]) {
@@ -131,7 +159,6 @@ static void YTKACECollectionViewCellDidMoveToWindow(UICollectionViewCell *receiv
     }
     if (receiver.window == nil) return;
 
-    receiver.layer.drawsAsynchronously = YES;
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (@available(iOS 15.0, *)) {
             YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(120.0f, 120.0f, 120.0f));
@@ -145,7 +172,6 @@ static void YTKACETableViewCellDidMoveToWindow(UITableViewCell *receiver, SEL se
     }
     if (receiver.window == nil) return;
 
-    receiver.layer.drawsAsynchronously = YES;
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (@available(iOS 15.0, *)) {
             YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(120.0f, 120.0f, 120.0f));
@@ -159,7 +185,6 @@ static void YTKACEASDisplayViewDidMoveToWindow(UIView *receiver, SEL selector) {
     }
     if (receiver.window == nil) return;
 
-    receiver.layer.drawsAsynchronously = YES;
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (@available(iOS 15.0, *)) {
             YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(120.0f, 120.0f, 120.0f));
@@ -168,6 +193,14 @@ static void YTKACEASDisplayViewDidMoveToWindow(UIView *receiver, SEL selector) {
 }
 
 void YTKACEInstallDisplayRateHooks(void) {
+    static dispatch_once_t cacheToken;
+    dispatch_once(&cacheToken, ^{
+        NSURLCache *shared = [[NSURLCache alloc] initWithMemoryCapacity:256 * 1024 * 1024
+                                                           diskCapacity:1024 * 1024 * 1024
+                                                               diskPath:nil];
+        [NSURLCache setSharedURLCache:shared];
+    });
+
     YTKACEInstallInstanceHook(@"NSBundle",
                               @"objectForInfoDictionaryKey:",
                               (IMP)YTKACEObjectForInfoDictionaryKey,
@@ -203,6 +236,11 @@ void YTKACEInstallDisplayRateHooks(void) {
                               (IMP)YTKACEScrollViewDidMoveToWindow,
                               &OriginalScrollViewDidMoveToWindow);
 
+    YTKACEInstallInstanceHook(@"UIScrollView",
+                              @"setContentOffset:",
+                              (IMP)YTKACEScrollViewSetContentOffset,
+                              &OriginalScrollViewSetContentOffset);
+
     YTKACEInstallInstanceHook(@"UICollectionViewCell",
                               @"didMoveToWindow",
                               (IMP)YTKACECollectionViewCellDidMoveToWindow,
@@ -217,4 +255,19 @@ void YTKACEInstallDisplayRateHooks(void) {
                               @"didMoveToWindow",
                               (IMP)YTKACEASDisplayViewDidMoveToWindow,
                               &OriginalASDisplayViewDidMoveToWindow);
+
+    for (NSString *className in @[@"YTInlinePlaybackController", @"YTElementsInlinePlaybackController"]) {
+        YTKACEInstallInstanceHook(className,
+                                  @"isPlaybackAllowed",
+                                  (IMP)YTKACEInlineIsPlaybackAllowed,
+                                  &OriginalInlineIsPlaybackAllowed);
+        YTKACEInstallInstanceHook(className,
+                                  @"shouldPlay",
+                                  (IMP)YTKACEInlineIsPlaybackAllowed,
+                                  NULL);
+    }
+    YTKACEInstallInstanceHook(@"YTMutedPlaybackController",
+                              @"isMutedPlaybackAllowed",
+                              (IMP)YTKACEMutedIsPlaybackAllowed,
+                              &OriginalMutedIsPlaybackAllowed);
 }

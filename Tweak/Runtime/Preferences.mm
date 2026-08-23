@@ -218,25 +218,15 @@ BOOL YTKACEFeatureEnabled(NSString *key) {
 }
 
 BOOL YTKACEOLEDActive(UITraitCollection *traits) {
-    if (!YTKACEFeatureEnabled(YTKACEOLEDKey)) {
+    BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
+    NSInteger themePreset = [YTKACEDefaults() integerForKey:YTKACEThemePresetKey];
+    if (!oledEnabled && themePreset == 0) {
         return NO;
     }
-    UITraitCollection *current = traits;
-    if (current == nil) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:UIWindowScene.class] ||
-                scene.activationState != UISceneActivationStateForegroundActive) continue;
-            for (UIWindow *window in ((UIWindowScene *)scene).windows) {
-                if (window.isKeyWindow) {
-                    current = window.traitCollection;
-                    break;
-                }
-            }
-            if (current != nil) break;
-        }
+    if (traits != nil && traits.userInterfaceStyle == UIUserInterfaceStyleLight && themePreset == 0) {
+        return NO;
     }
-    current = current ?: UIScreen.mainScreen.traitCollection;
-    return current.userInterfaceStyle == UIUserInterfaceStyleDark;
+    return YES;
 }
 
 UIColor *YTKACEColorFromHex(NSString *hex, UIColor *fallback) {
@@ -256,12 +246,12 @@ UIColor *YTKACEColorFromHex(NSString *hex, UIColor *fallback) {
 UIColor *YTKACEThemeTopColor(void) {
     NSInteger preset = [YTKACEDefaults() integerForKey:YTKACEThemePresetKey];
     switch (preset) {
-        case 1: return [UIColor colorWithRed:0.02 green:0.0 blue:0.01 alpha:1.0]; // Midnight Crimson Top
-        case 2: return [UIColor colorWithRed:0.02 green:0.02 blue:0.07 alpha:1.0]; // Cyberpunk Neon Top
-        case 3: return [UIColor colorWithRed:0.005 green:0.04 blue:0.02 alpha:1.0]; // Emerald Abyss Top
-        case 4: return [UIColor colorWithRed:0.04 green:0.02 blue:0.005 alpha:1.0]; // Sunset Ember Top
-        case 5: return [UIColor colorWithRed:0.03 green:0.005 blue:0.06 alpha:1.0]; // Nebula Violet Top
-        case 6: return [UIColor colorWithRed:0.005 green:0.025 blue:0.07 alpha:1.0]; // Deep Ocean Blue Top
+        case 1: return [UIColor colorWithRed:0.06 green:0.0 blue:0.01 alpha:1.0]; // Midnight Crimson Top
+        case 2: return [UIColor colorWithRed:0.03 green:0.01 blue:0.08 alpha:1.0]; // Cyberpunk Neon Top
+        case 3: return [UIColor colorWithRed:0.0 green:0.05 blue:0.02 alpha:1.0]; // Emerald Abyss Top
+        case 4: return [UIColor colorWithRed:0.08 green:0.02 blue:0.0 alpha:1.0]; // Sunset Ember Top
+        case 5: return [UIColor colorWithRed:0.05 green:0.0 blue:0.09 alpha:1.0]; // Nebula Violet Top
+        case 6: return [UIColor colorWithRed:0.0 green:0.03 blue:0.09 alpha:1.0]; // Deep Ocean Blue Top
         case 7: {
             NSString *hex = [YTKACEDefaults() stringForKey:YTKACEThemeTopHexKey];
             return YTKACEColorFromHex(hex, UIColor.blackColor);
@@ -273,15 +263,15 @@ UIColor *YTKACEThemeTopColor(void) {
 UIColor *YTKACEThemeBottomColor(void) {
     NSInteger preset = [YTKACEDefaults() integerForKey:YTKACEThemePresetKey];
     switch (preset) {
-        case 1: return [UIColor colorWithRed:0.22 green:0.01 blue:0.04 alpha:1.0]; // Velvet Crimson
-        case 2: return [UIColor colorWithRed:0.16 green:0.02 blue:0.25 alpha:1.0]; // Electric Purple
-        case 3: return [UIColor colorWithRed:0.01 green:0.18 blue:0.08 alpha:1.0]; // Forest Emerald
-        case 4: return [UIColor colorWithRed:0.23 green:0.07 blue:0.01 alpha:1.0]; // Sunset Amber
-        case 5: return [UIColor colorWithRed:0.15 green:0.01 blue:0.24 alpha:1.0]; // Nebula Violet
-        case 6: return [UIColor colorWithRed:0.01 green:0.12 blue:0.27 alpha:1.0]; // Abyss Navy
+        case 1: return [UIColor colorWithRed:0.23 green:0.01 blue:0.04 alpha:1.0]; // Velvet Crimson
+        case 2: return [UIColor colorWithRed:0.19 green:0.03 blue:0.33 alpha:1.0]; // Electric Purple
+        case 3: return [UIColor colorWithRed:0.01 green:0.23 blue:0.11 alpha:1.0]; // Forest Emerald
+        case 4: return [UIColor colorWithRed:0.25 green:0.07 blue:0.01 alpha:1.0]; // Sunset Amber
+        case 5: return [UIColor colorWithRed:0.22 green:0.03 blue:0.37 alpha:1.0]; // Nebula Violet
+        case 6: return [UIColor colorWithRed:0.02 green:0.16 blue:0.37 alpha:1.0]; // Abyss Navy
         case 7: {
             NSString *hex = [YTKACEDefaults() stringForKey:YTKACEThemeBottomHexKey];
-            return YTKACEColorFromHex(hex, [UIColor colorWithRed:0.22 green:0.01 blue:0.04 alpha:1.0]);
+            return YTKACEColorFromHex(hex, [UIColor colorWithRed:0.23 green:0.01 blue:0.04 alpha:1.0]);
         }
         default: return UIColor.blackColor; // OLED Pure Black
     }
@@ -293,12 +283,12 @@ UIColor *YTKACEThemeBackgroundColor(UITraitCollection *traits) {
     }
     NSInteger preset = [YTKACEDefaults() integerForKey:YTKACEThemePresetKey];
     switch (preset) {
-        case 1: return [UIColor colorWithRed:0.07 green:0.005 blue:0.015 alpha:1.0]; // Crimson Base
-        case 2: return [UIColor colorWithRed:0.04 green:0.02 blue:0.11 alpha:1.0]; // Cyberpunk Base
-        case 3: return [UIColor colorWithRed:0.01 green:0.08 blue:0.04 alpha:1.0]; // Emerald Base
-        case 4: return [UIColor colorWithRed:0.08 green:0.03 blue:0.01 alpha:1.0]; // Sunset Base
-        case 5: return [UIColor colorWithRed:0.06 green:0.01 blue:0.10 alpha:1.0]; // Nebula Base
-        case 6: return [UIColor colorWithRed:0.01 green:0.05 blue:0.12 alpha:1.0]; // Ocean Base
+        case 1: return [UIColor colorWithRed:0.09 green:0.005 blue:0.02 alpha:1.0]; // Crimson Base
+        case 2: return [UIColor colorWithRed:0.07 green:0.02 blue:0.14 alpha:1.0]; // Cyberpunk Base
+        case 3: return [UIColor colorWithRed:0.005 green:0.09 blue:0.04 alpha:1.0]; // Emerald Base
+        case 4: return [UIColor colorWithRed:0.11 green:0.03 blue:0.01 alpha:1.0]; // Sunset Base
+        case 5: return [UIColor colorWithRed:0.08 green:0.01 blue:0.15 alpha:1.0]; // Nebula Base
+        case 6: return [UIColor colorWithRed:0.01 green:0.06 blue:0.17 alpha:1.0]; // Ocean Base
         case 7: {
             UIColor *top = YTKACEThemeTopColor();
             UIColor *bottom = YTKACEThemeBottomColor();
@@ -318,21 +308,24 @@ UIColor *YTKACEThemeSurfaceColor(UITraitCollection *traits) {
     }
     NSInteger preset = [YTKACEDefaults() integerForKey:YTKACEThemePresetKey];
     switch (preset) {
-        case 1: return [UIColor colorWithRed:0.15 green:0.01 blue:0.04 alpha:1.0]; // Crimson Surface
-        case 2: return [UIColor colorWithRed:0.11 green:0.03 blue:0.20 alpha:1.0]; // Cyberpunk Surface
-        case 3: return [UIColor colorWithRed:0.02 green:0.13 blue:0.06 alpha:1.0]; // Emerald Surface
-        case 4: return [UIColor colorWithRed:0.16 green:0.05 blue:0.02 alpha:1.0]; // Sunset Surface
-        case 5: return [UIColor colorWithRed:0.12 green:0.02 blue:0.18 alpha:1.0]; // Nebula Surface
-        case 6: return [UIColor colorWithRed:0.02 green:0.09 blue:0.20 alpha:1.0]; // Ocean Surface
+        case 1: return [UIColor colorWithRed:0.17 green:0.01 blue:0.04 alpha:1.0]; // Crimson Surface
+        case 2: return [UIColor colorWithRed:0.13 green:0.04 blue:0.27 alpha:1.0]; // Cyberpunk Surface
+        case 3: return [UIColor colorWithRed:0.01 green:0.17 blue:0.08 alpha:1.0]; // Emerald Surface
+        case 4: return [UIColor colorWithRed:0.20 green:0.05 blue:0.02 alpha:1.0]; // Sunset Surface
+        case 5: return [UIColor colorWithRed:0.16 green:0.02 blue:0.28 alpha:1.0]; // Nebula Surface
+        case 6: return [UIColor colorWithRed:0.03 green:0.12 blue:0.30 alpha:1.0]; // Ocean Surface
         case 7: {
             UIColor *bg = YTKACEThemeBackgroundColor(traits);
             CGFloat r, g, b, a;
             if ([bg getRed:&r green:&g blue:&b alpha:&a]) {
-                return [UIColor colorWithRed:MIN(1.0, r + 0.08) green:MIN(1.0, g + 0.08) blue:MIN(1.0, b + 0.08) alpha:1.0];
+                return [UIColor colorWithRed:MIN(1.0, r * 1.5 + 0.05)
+                                       green:MIN(1.0, g * 1.5 + 0.05)
+                                        blue:MIN(1.0, b * 1.5 + 0.05)
+                                       alpha:1.0];
             }
-            return [UIColor colorWithWhite:0.10 alpha:1.0];
+            return [UIColor colorWithWhite:0.12 alpha:1.0];
         }
-        default: return [UIColor colorWithWhite:0.06 alpha:1.0];
+        default: return [UIColor colorWithWhite:0.08 alpha:1.0];
     }
 }
 

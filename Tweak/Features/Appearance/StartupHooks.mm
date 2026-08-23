@@ -22,14 +22,14 @@ static IMP YTKACEStartupOriginal(id receiver, SEL selector) {
     return NULL;
 }
 
-static void YTKACEStartupBlacken(UIView *view) {
+static void YTKACEStartupBlacken(UIView *view, UIColor *color) {
     if (view == nil) return;
     UIColor *background = view.backgroundColor;
     if (background != nil && CGColorGetAlpha(background.CGColor) > 0.01) {
-        view.backgroundColor = UIColor.blackColor;
+        view.backgroundColor = color;
     }
     for (UIView *child in view.subviews) {
-        YTKACEStartupBlacken(child);
+        YTKACEStartupBlacken(child, color);
     }
 }
 
@@ -40,9 +40,10 @@ static void YTKACEStartupViewDidLoad(UIViewController *receiver,
         ((void (*)(id, SEL))original)(receiver, selector);
     }
     if (YTKACEOLEDActive(receiver.traitCollection)) {
-        receiver.view.backgroundColor = UIColor.blackColor;
-        YTKACEStartupBlacken(receiver.view);
-        receiver.view.window.backgroundColor = UIColor.blackColor;
+        UIColor *themeColor = YTKACEThemeBackgroundColor(receiver.traitCollection);
+        receiver.view.backgroundColor = themeColor;
+        YTKACEStartupBlacken(receiver.view, themeColor);
+        receiver.view.window.backgroundColor = themeColor;
     }
 }
 
@@ -73,9 +74,10 @@ static void YTKACEStartupViewDidAppear(UIViewController *receiver,
         ((void (*)(id, SEL, BOOL))original)(receiver, selector, animated);
     }
     if (YTKACEOLEDActive(receiver.traitCollection)) {
-        receiver.view.backgroundColor = UIColor.blackColor;
-        YTKACEStartupBlacken(receiver.view);
-        receiver.view.window.backgroundColor = UIColor.blackColor;
+        UIColor *themeColor = YTKACEThemeBackgroundColor(receiver.traitCollection);
+        receiver.view.backgroundColor = themeColor;
+        YTKACEStartupBlacken(receiver.view, themeColor);
+        receiver.view.window.backgroundColor = themeColor;
     }
     if (YTKACEFeatureEnabled(@"YTKACE.Preference.Appearance.LaunchAnimationDisabled")) {
         dispatch_async(dispatch_get_main_queue(), ^{

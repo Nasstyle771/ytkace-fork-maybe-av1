@@ -37,25 +37,23 @@ static UIColor *YTKACEOLEDColor(id receiver, SEL selector) {
     UIColor *base = original == NULL
         ? nil
         : ((id (*)(id, SEL))original)(receiver, selector);
-    if (!YTKACEFeatureEnabled(YTKACEOLEDKey)) return base;
-    __weak id weakReceiver = receiver;
+    NSInteger preset = [NSUserDefaults.standardUserDefaults integerForKey:YTKACEThemePresetKey];
+    BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
+    if (!oledEnabled && preset == 0) return base;
+
     return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
         if (YTKACEOLEDActive(traits)) {
             NSString *sel = NSStringFromSelector(selector);
             if ([sel containsString:@"menu"] || [sel containsString:@"dialog"] ||
                 [sel containsString:@"elevated"] || [sel containsString:@"raised"] ||
-                [sel containsString:@"Surface"] || [sel containsString:@"Container"]) {
+                [sel containsString:@"Surface"] || [sel containsString:@"Container"] ||
+                [sel containsString:@"chip"] || [sel containsString:@"overlay"] ||
+                [sel containsString:@"Secondary"]) {
                 return YTKACEThemeSurfaceColor(traits);
             }
             return YTKACEThemeBackgroundColor(traits);
         }
-        id target = weakReceiver;
-        UIColor *current = target == nil || original == NULL
-            ? base
-            : ((id (*)(id, SEL))original)(target, selector);
-        return current == nil ? [UIColor.systemBackgroundColor
-            resolvedColorWithTraitCollection:traits]
-            : [current resolvedColorWithTraitCollection:traits];
+        return base ?: UIColor.blackColor;
     }];
 }
 
@@ -286,7 +284,14 @@ void YTKACEInstallOLEDHooks(void) {
         @"generalBackgroundC",
         @"menuBackground",
         @"dialogBackgroundColor",
-        @"elevatedBackgroundColor"
+        @"elevatedBackgroundColor",
+        @"background1",
+        @"background2",
+        @"background3",
+        @"overlayBackgroundSolid",
+        @"brandSurface",
+        @"chipBackground",
+        @"adBackground"
     ];
     for (NSString *selector in paletteSelectors) {
         YTKACEInstallColorHook(@"YTCommonColorPalette", selector, NO);
@@ -314,4 +319,22 @@ void YTKACEInstallOLEDHooks(void) {
                               (IMP)YTKACEAppStatusBarStyle,
                               &OriginalAppStatusBarStyle);
 
+    static dispatch_once_t notifToken;
+    dispatch_once(&notifToken, ^{
+        [NSNotificationCenter.defaultCenter
+            addObserverForName:YTKACEPreferencesDidChangeNotification
+                        object:nil
+                         queue:NSOperationQueue.mainQueue
+                    usingBlock:^(__unused NSNotification *notification) {
+            for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+                if (![scene isKindOfClass:UIWindowScene.class]) continue;
+                for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+                    [window.rootViewController setNeedsStatusBarAppearanceUpdate];
+                    [window.rootViewController.view setNeedsLayout];
+                    [window setNeedsDisplay];
+                }
+            }
+            YTKACERefreshNavigationAppearance();
+        }];
+    });
 }
