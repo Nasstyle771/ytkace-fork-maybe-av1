@@ -6,6 +6,7 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 
 static IMP OriginalObjectForInfoDictionaryKey;
 static IMP OriginalInfoDictionary;
