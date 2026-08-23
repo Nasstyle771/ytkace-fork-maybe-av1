@@ -118,6 +118,9 @@ static NSError *YTKACERemux(NSURL *videoURL, NSURL *audioURL,
         if (result < 0) goto cleanup;
     }
     av_dict_set(&options, "movflags", "+faststart", 0);
+    av_dict_set(&options, "threads", "auto", 0);
+    av_dict_set(&options, "max_interleave_delta", "100000", 0);
+    output->max_interleave_delta = 100000;
     result = avformat_write_header(output, &options);
     stage = @"Write header";
     if (result < 0) goto cleanup;
