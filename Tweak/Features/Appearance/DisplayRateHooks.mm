@@ -192,6 +192,26 @@ static void YTKACEASDisplayViewDidMoveToWindow(UIView *receiver, SEL selector) {
     }
 }
 
+struct YTKACEASRangeTuningParams {
+    CGFloat leadingBufferScreenfuls;
+    CGFloat trailingBufferScreenfuls;
+};
+
+static IMP OriginalCollectionNodeRangeTuning;
+static struct YTKACEASRangeTuningParams YTKACECollectionNodeRangeTuning(id receiver, SEL selector, NSInteger rangeType) {
+    if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
+        struct YTKACEASRangeTuningParams params;
+        params.leadingBufferScreenfuls = 2.5;
+        params.trailingBufferScreenfuls = 0.5;
+        return params;
+    }
+    if (OriginalCollectionNodeRangeTuning != NULL) {
+        return ((struct YTKACEASRangeTuningParams (*)(id, SEL, NSInteger))OriginalCollectionNodeRangeTuning)(receiver, selector, rangeType);
+    }
+    struct YTKACEASRangeTuningParams def = { 2.0, 0.5 };
+    return def;
+}
+
 void YTKACEInstallDisplayRateHooks(void) {
     static dispatch_once_t cacheToken;
     dispatch_once(&cacheToken, ^{
@@ -199,6 +219,12 @@ void YTKACEInstallDisplayRateHooks(void) {
                                                            diskCapacity:1024 * 1024 * 1024
                                                                diskPath:nil];
         [NSURLCache setSharedURLCache:shared];
+        [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidReceiveMemoryWarningNotification
+                                                        object:nil
+                                                         queue:NSOperationQueue.mainQueue
+                                                    usingBlock:^(NSNotification *note) {
+            [NSURLCache.sharedURLCache removeAllCachedResponses];
+        }];
     });
 
     YTKACEInstallInstanceHook(@"NSBundle",
@@ -255,6 +281,13 @@ void YTKACEInstallDisplayRateHooks(void) {
                               @"didMoveToWindow",
                               (IMP)YTKACEASDisplayViewDidMoveToWindow,
                               &OriginalASDisplayViewDidMoveToWindow);
+
+    for (NSString *nodeClass in @[@"ASCollectionNode", @"ASTableNode"]) {
+        YTKACEInstallInstanceHook(nodeClass,
+                                  @"rangeTuningParametersForRangeType:",
+                                  (IMP)YTKACECollectionNodeRangeTuning,
+                                  &OriginalCollectionNodeRangeTuning);
+    }
 
     for (NSString *className in @[@"YTInlinePlaybackController", @"YTElementsInlinePlaybackController"]) {
         YTKACEInstallInstanceHook(className,

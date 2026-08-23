@@ -45,6 +45,11 @@ static void YTKACEStartupViewDidLoad(UIViewController *receiver,
         YTKACEStartupBlacken(receiver.view, themeColor);
         receiver.view.window.backgroundColor = themeColor;
     }
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Appearance.LaunchAnimationDisabled")) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            YTKACEFinishStartup(receiver);
+        });
+    }
 }
 
 static void YTKACEFinishStartup(UIViewController *receiver) {
