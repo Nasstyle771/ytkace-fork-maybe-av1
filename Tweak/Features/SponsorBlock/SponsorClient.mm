@@ -26,8 +26,8 @@
 
         NSURLSessionConfiguration *configuration =
             NSURLSessionConfiguration.ephemeralSessionConfiguration;
-        configuration.timeoutIntervalForRequest = 10.0;
-        configuration.timeoutIntervalForResource = 15.0;
+        configuration.timeoutIntervalForRequest = 3.0;
+        configuration.timeoutIntervalForResource = 5.0;
         configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
         _session = [NSURLSession sessionWithConfiguration:configuration];
     }

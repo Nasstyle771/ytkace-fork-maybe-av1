@@ -185,6 +185,7 @@ static NSString *YTKACELegacyResumeIdentifier(NSURL *URL) {
 static void YTKACEWriteResumeTable(NSUserDefaults *defaults,
                                    NSDictionary *table) {
     [defaults setObject:table forKey:YTKACEResumeKey];
+    [defaults synchronize];
 }
 
 static NSDictionary *YTKACEValidatedResumeRecord(NSURL *URL,

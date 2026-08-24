@@ -48,7 +48,7 @@ static void YTKACEDisplayLinkSetPreferredFrameRateRange(CADisplayLink *receiver,
                                                        CAFrameRateRange range) {
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
-            range = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+            range = CAFrameRateRangeMake(24.0f, 120.0f, 120.0f);
         }
     }
     if (OriginalDisplayLinkSetPreferredFrameRateRange != NULL) {
@@ -78,7 +78,7 @@ static void YTKACELayerSetPreferredFrameRateRange(CALayer *receiver,
                             [className containsString:@"AVSampleBufferDisplayLayer"];
         if (!isVideoLayer) {
             if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
-                range = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+                range = CAFrameRateRangeMake(24.0f, 120.0f, 120.0f);
             }
         }
     }
@@ -93,7 +93,7 @@ static void YTKACEAnimationSetPreferredFrameRateRange(CAAnimation *receiver,
                                                      CAFrameRateRange range) {
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
-            range = CAFrameRateRangeMake(120.0f, 120.0f, 120.0f);
+            range = CAFrameRateRangeMake(24.0f, 120.0f, 120.0f);
         }
     }
     if (OriginalAnimationSetPreferredFrameRateRange != NULL) {
@@ -153,7 +153,7 @@ static void YTKACEScrollViewDidMoveToWindow(UIScrollView *receiver, SEL selector
         }
         if (@available(iOS 15.0, *)) {
             receiver.panGestureRecognizer.allowedTouchTypes = @[@(UITouchTypeDirect)];
-            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(120.0f, 120.0f, 120.0f));
+            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(24.0f, 120.0f, 120.0f));
         }
     }
 }
@@ -166,7 +166,7 @@ static void YTKACECollectionViewCellDidMoveToWindow(UICollectionViewCell *receiv
 
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (@available(iOS 15.0, *)) {
-            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(120.0f, 120.0f, 120.0f));
+            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(24.0f, 120.0f, 120.0f));
         }
     }
 }
@@ -179,7 +179,7 @@ static void YTKACETableViewCellDidMoveToWindow(UITableViewCell *receiver, SEL se
 
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (@available(iOS 15.0, *)) {
-            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(120.0f, 120.0f, 120.0f));
+            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(24.0f, 120.0f, 120.0f));
         }
     }
 }
@@ -192,7 +192,7 @@ static void YTKACEASDisplayViewDidMoveToWindow(UIView *receiver, SEL selector) {
 
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (@available(iOS 15.0, *)) {
-            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(120.0f, 120.0f, 120.0f));
+            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(24.0f, 120.0f, 120.0f));
         }
     }
 }

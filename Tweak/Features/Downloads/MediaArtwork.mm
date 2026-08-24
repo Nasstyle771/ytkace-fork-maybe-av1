@@ -20,6 +20,21 @@ NSData *YTKACEMediaArtworkData(NSURL *URL) {
 }
 
 UIImage *YTKACEMediaArtworkImage(NSURL *URL) {
+    if (URL == nil) return nil;
+    static NSCache<NSURL *, UIImage *> *s_artworkCache;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_artworkCache = [NSCache new];
+        s_artworkCache.countLimit = 64;
+    });
+    UIImage *cached = [s_artworkCache objectForKey:URL];
+    if (cached != nil) return cached;
+
     NSData *data = YTKACEMediaArtworkData(URL);
-    return data.length == 0 ? nil : [UIImage imageWithData:data];
+    if (data.length == 0) return nil;
+    UIImage *image = [UIImage imageWithData:data];
+    if (image != nil) {
+        [s_artworkCache setObject:image forKey:URL];
+    }
+    return image;
 }
