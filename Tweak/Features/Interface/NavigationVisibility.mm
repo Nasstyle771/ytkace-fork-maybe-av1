@@ -14,8 +14,6 @@ static IMP OriginalYTImageSetHidden;
 static IMP OriginalQTMButtonLayout;
 static IMP OriginalQTMButtonSetTint;
 static IMP OriginalQTMButtonSetImage;
-static IMP OriginalNavigationImageSetTint;
-static IMP OriginalNavigationImageSetImage;
 static IMP OriginalYTImageViewLayout;
 static IMP OriginalMainWindowTraitChanged;
 static IMP OriginalRightNavigationTraitChanged;
@@ -552,19 +550,6 @@ static void YTKACEQTMButtonSetTint(UIView *receiver,
     }
 }
 
-static void YTKACENavigationImageSetTint(UIView *receiver,
-                                         SEL selector,
-                                         UIColor *color) {
-    if (YTKACEFeatureEnabled(YTKACEOLEDKey) &&
-        YTKACEInsideRightNavigation(receiver)) {
-        color = YTKACENavigationForeground(receiver);
-    }
-    if (OriginalNavigationImageSetTint != NULL) {
-        ((void (*)(id, SEL, id))OriginalNavigationImageSetTint)(
-            receiver, selector, color);
-    }
-}
-
 static void YTKACEQTMButtonSetImage(UIButton *receiver,
                                     SEL selector,
                                     UIImage *image,
@@ -580,25 +565,6 @@ static void YTKACEQTMButtonSetImage(UIButton *receiver,
     }
     if (styled && OriginalQTMButtonSetTint != NULL) {
         ((void (*)(id, SEL, id))OriginalQTMButtonSetTint)(
-            receiver, @selector(setTintColor:),
-            YTKACENavigationForeground(receiver));
-    }
-}
-
-static void YTKACENavigationImageSetImage(UIImageView *receiver,
-                                          SEL selector,
-                                          UIImage *image) {
-    BOOL styled = YTKACEFeatureEnabled(YTKACEOLEDKey) &&
-        YTKACEInsideRightNavigation(receiver);
-    if (styled && image != nil) {
-        image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    }
-    if (OriginalNavigationImageSetImage != NULL) {
-        ((void (*)(id, SEL, id))OriginalNavigationImageSetImage)(
-            receiver, selector, image);
-    }
-    if (styled && OriginalNavigationImageSetTint != NULL) {
-        ((void (*)(id, SEL, id))OriginalNavigationImageSetTint)(
             receiver, @selector(setTintColor:),
             YTKACENavigationForeground(receiver));
     }
@@ -681,14 +647,6 @@ void YTKACEInstallNavigationVisibilityHooks(void) {
                               @"setImage:forState:",
                               (IMP)YTKACEQTMButtonSetImage,
                               &OriginalQTMButtonSetImage);
-    YTKACEInstallInstanceHook(@"UIImageView",
-                              @"setTintColor:",
-                              (IMP)YTKACENavigationImageSetTint,
-                              &OriginalNavigationImageSetTint);
-    YTKACEInstallInstanceHook(@"UIImageView",
-                              @"setImage:",
-                              (IMP)YTKACENavigationImageSetImage,
-                              &OriginalNavigationImageSetImage);
     YTKACEInstallInstanceHook(@"YTImageView",
                               @"layoutSubviews",
                               (IMP)YTKACEYTImageViewLayout,

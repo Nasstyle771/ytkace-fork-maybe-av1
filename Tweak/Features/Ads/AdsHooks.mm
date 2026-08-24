@@ -36,15 +36,6 @@ static IMP OriginalHasAppPromoCompanionAdRenderer;
 static IMP OriginalHasShoppingCompanionAdRenderer;
 static IMP OriginalElementContentsArray;
 static IMP OriginalItemSectionContentsArray;
-static IMP OriginalAdCellLayout;
-static IMP OriginalAdCellReuse;
-static NSMutableDictionary<NSString *, NSValue *> *YTKACEPromotedSizeOriginals;
-static os_unfair_lock YTKACEPromotedLock = OS_UNFAIR_LOCK_INIT;
-static IMP OriginalVideoNodeSetEntry;
-static IMP OriginalVideoNodeHeight;
-static IMP OriginalVideoNodeSize;
-static IMP OriginalVideoNodeShrink;
-static const void *YTKACEAdNodeAssociation = &YTKACEAdNodeAssociation;
 static const void *YTKACEAdMatchAssociation = &YTKACEAdMatchAssociation;
 static const void *YTKACEAdEmptyAssociation = &YTKACEAdEmptyAssociation;
 
@@ -471,94 +462,17 @@ static const void *YTKACEAdCellAssociation = &YTKACEAdCellAssociation;
 
 typedef struct {
     NSUInteger unit;
-    CGFloat value;
-} YTKACEASDimension;
-
-static void YTKACECollapseCellNode(id node) {
-    SEL styleSelector = NSSelectorFromString(@"style");
-    if ([node respondsToSelector:styleSelector]) {
-        id style = ((id (*)(id, SEL))objc_msgSend)(node, styleSelector);
-        YTKACEASDimension zero = {1, 0.0};
-        for (NSString *name in @[@"setHeight:", @"setMaxHeight:"]) {
-            SEL selector = NSSelectorFromString(name);
-            if (![style respondsToSelector:selector]) continue;
-            ((void (*)(id, SEL, YTKACEASDimension))objc_msgSend)(
-                style, selector, zero);
-        }
-    }
-    for (NSString *name in @[@"invalidateCalculatedLayout", @"setNeedsLayout"]) {
-        SEL selector = NSSelectorFromString(name);
-        if ([node respondsToSelector:selector]) {
-            ((void (*)(id, SEL))objc_msgSend)(node, selector);
-        }
-    }
-}
-
-static void YTKACECollapseAdCell(UIView *cell) {
-    CGRect frame = cell.frame;
-    if (frame.size.height == 0.0 && cell.hidden) return;
-    frame.size.height = 0.0;
-    cell.frame = frame;
-    cell.hidden = YES;
-    cell.userInteractionEnabled = NO;
-    for (UIView *ancestor = cell.superview; ancestor != nil;
-         ancestor = ancestor.superview) {
-        if ([ancestor isKindOfClass:UICollectionView.class]) {
-            [((UICollectionView *)ancestor).collectionViewLayout invalidateLayout];
-            break;
-        }
-    }
-}
-
-void YTKACEHandleAdCellLayout(UIView *cell) {
-    if (![objc_getAssociatedObject(cell, YTKACEAdCellAssociation) boolValue]) return;
-    YTKACECollapseAdCell(cell);
-}
-
-void YTKACEHandleAdCellReuse(UIView *cell) {
-    if (![objc_getAssociatedObject(cell, YTKACEAdCellAssociation) boolValue]) return;
-    objc_setAssociatedObject(cell, YTKACEAdCellAssociation, nil,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    cell.hidden = NO;
-    cell.userInteractionEnabled = YES;
-}
-
 void YTKACECollapseHostCell(UIView *view) {
     if (view == nil) return;
-    UIView *cell = nil;
-    for (UIView *ancestor = view; ancestor != nil;
-         ancestor = ancestor.superview) {
-        if ([ancestor isKindOfClass:UICollectionViewCell.class] ||
-            [NSStringFromClass([ancestor class]) hasSuffix:@"CollectionViewCell"]) {
-            cell = ancestor;
-            break;
-        }
-    }
     view.hidden = YES;
-    if (cell == nil) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [view removeFromSuperview];
-        });
-        return;
-    }
-    objc_setAssociatedObject(cell, YTKACEAdCellAssociation, @YES,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    YTKACECollapseAdCell(cell);
-    SEL nodeSelector = NSSelectorFromString(@"node");
-    if ([cell respondsToSelector:nodeSelector]) {
-        id node = ((id (*)(id, SEL))objc_msgSend)(cell, nodeSelector);
-        if (node != nil) {
-            objc_setAssociatedObject(node, YTKACEAdNodeAssociation, @YES,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            YTKACECollapseCellNode(node);
-        }
-    }
+    view.userInteractionEnabled = NO;
 }
 
 void YTKACEHandleAdDisplayView(UIView *view) {
-    if (!YTKACEFeatureEnabled(YTKACENoAdsKey) || view.window == nil) return;
+    if (!YTKACEFeatureEnabled(YTKACENoAdsKey) || view == nil) return;
     if (!YTKACEIsAdLayoutIdentifier(view.accessibilityIdentifier)) return;
-    YTKACECollapseHostCell(view);
+    view.hidden = YES;
+    view.userInteractionEnabled = NO;
 }
 
 static id YTKACEElementRenderer(id object) {
@@ -725,154 +639,7 @@ static void YTKACEAdCellPrepareForReuse(UIView *receiver, SEL selector) {
     }
 }
 
-static IMP YTKACEPromotedSizeOriginal(id receiver, SEL selector) {
-    NSString *key = [NSString stringWithFormat:@"%@|%@",
-        NSStringFromClass([receiver class]), NSStringFromSelector(selector)];
-    os_unfair_lock_lock(&YTKACEPromotedLock);
-    IMP result = (IMP)[YTKACEPromotedSizeOriginals[key] pointerValue];
-    os_unfair_lock_unlock(&YTKACEPromotedLock);
-    return result;
-}
-
-static CGSize YTKACEPromotedCellSize(id receiver, SEL selector, CGSize size) {
-    IMP original = YTKACEPromotedSizeOriginal(receiver, selector);
-    CGSize resolved = original == NULL
-        ? size
-        : ((CGSize (*)(id, SEL, CGSize))original)(receiver, selector, size);
-    if (!YTKACEFeatureEnabled(YTKACENoAdsKey)) return resolved;
-    return CGSizeMake(resolved.width, 0.0);
-}
-
-static CGSize YTKACEPromotedCellSizeInsets(id receiver, SEL selector,
-                                           CGSize size, UIEdgeInsets insets) {
-    IMP original = YTKACEPromotedSizeOriginal(receiver, selector);
-    CGSize resolved = original == NULL
-        ? size
-        : ((CGSize (*)(id, SEL, CGSize, UIEdgeInsets))original)(
-            receiver, selector, size, insets);
-    if (!YTKACEFeatureEnabled(YTKACENoAdsKey)) return resolved;
-    return CGSizeMake(resolved.width, 0.0);
-}
-
-static BOOL YTKACEShouldShowPromotedItems(id receiver, SEL selector) {
-    if (YTKACEFeatureEnabled(YTKACENoAdsKey)) return NO;
-    IMP original = YTKACEPromotedSizeOriginal(receiver, selector);
-    return original != NULL && ((BOOL (*)(id, SEL))original)(receiver, selector);
-}
-
-static void YTKACEInstallPromotedCellHooks(void) {
-    YTKACEPromotedSizeOriginals = [NSMutableDictionary dictionary];
-    NSArray<NSString *> *classes = @[@"YTCompactPromotedItemCellController",
-                                     @"YTCompactPromotedVideoCellController",
-                                     @"YTPromotedVideoCellController"];
-    NSDictionary<NSString *, NSValue *> *replacements = @{
-        @"cellSizeWithSize:": [NSValue valueWithPointer:(void *)YTKACEPromotedCellSize],
-        @"cellSizeWithSize:safeAreaInsets:":
-            [NSValue valueWithPointer:(void *)YTKACEPromotedCellSizeInsets],
-        @"shouldShowPromotedItems":
-            [NSValue valueWithPointer:(void *)YTKACEShouldShowPromotedItems]
-    };
-    for (NSString *className in classes) {
-        for (NSString *selectorName in replacements) {
-            IMP original = NULL;
-            if (!YTKACEInstallInstanceHook(className, selectorName,
-                    (IMP)replacements[selectorName].pointerValue, &original)) {
-                continue;
-            }
-            NSString *key = [NSString stringWithFormat:@"%@|%@",
-                className, selectorName];
-            os_unfair_lock_lock(&YTKACEPromotedLock);
-            YTKACEPromotedSizeOriginals[key] =
-                [NSValue valueWithPointer:(void *)original];
-            os_unfair_lock_unlock(&YTKACEPromotedLock);
-        }
-    }
-}
-
-static BOOL YTKACEIsAdNode(id node) {
-    return [objc_getAssociatedObject(node, YTKACEAdNodeAssociation) boolValue];
-}
-
-static void YTKACEVideoNodeSetEntry(id receiver, SEL selector, id entry) {
-    if (OriginalVideoNodeSetEntry != NULL) {
-        ((void (*)(id, SEL, id))OriginalVideoNodeSetEntry)(receiver, selector, entry);
-    }
-    if (!YTKACEFeatureEnabled(YTKACENoAdsKey)) return;
-    BOOL isAd = YTKACEObjectLooksLikeAd(entry) ||
-        YTKACEObjectLooksLikeAd(YTKACEElementRenderer(entry));
-    objc_setAssociatedObject(receiver, YTKACEAdNodeAssociation,
-                             isAd ? @YES : nil,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (!isAd) return;
-    YTKACECollapseCellNode(receiver);
-    SEL overlay = NSSelectorFromString(@"dismissedCellOverlayView");
-    SEL setOverlay = NSSelectorFromString(@"setDismissedCellOverlayView:");
-    SEL resize = NSSelectorFromString(@"resizeDismissedView");
-    if ([receiver respondsToSelector:overlay] &&
-        [receiver respondsToSelector:setOverlay] &&
-        ((id (*)(id, SEL))objc_msgSend)(receiver, overlay) == nil) {
-        UIView *placeholder = [[UIView alloc] initWithFrame:CGRectZero];
-        placeholder.hidden = YES;
-        ((void (*)(id, SEL, id))objc_msgSend)(receiver, setOverlay, placeholder);
-    }
-    if (![receiver respondsToSelector:resize]) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (!YTKACEIsAdNode(receiver)) return;
-        ((void (*)(id, SEL))objc_msgSend)(receiver, resize);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
-                                     (int64_t)(0.6 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-        });
-    });
-}
-
-static BOOL YTKACEVideoNodeShouldShrink(id receiver, SEL selector) {
-    if (YTKACEIsAdNode(receiver)) {
-        return YES;
-    }
-    return OriginalVideoNodeShrink != NULL &&
-        ((BOOL (*)(id, SEL))OriginalVideoNodeShrink)(receiver, selector);
-}
-
-static double YTKACEVideoNodeHeight(id receiver, SEL selector) {
-    double height = OriginalVideoNodeHeight == NULL
-        ? 0.0
-        : ((double (*)(id, SEL))OriginalVideoNodeHeight)(receiver, selector);
-    if (!YTKACEIsAdNode(receiver)) return height;
-    return 0.0;
-}
-
-static CGSize YTKACEVideoNodeSize(id receiver, SEL selector) {
-    CGSize size = OriginalVideoNodeSize == NULL
-        ? CGSizeZero
-        : ((CGSize (*)(id, SEL))OriginalVideoNodeSize)(receiver, selector);
-    if (!YTKACEIsAdNode(receiver)) return size;
-    return CGSizeMake(size.width, 0.0);
-}
-
 void YTKACEInstallAdsHooks(void) {
-    YTKACEInstallInstanceHook(@"YTVideoWithContextNode", @"setEntry:",
-                              (IMP)YTKACEVideoNodeSetEntry,
-                              &OriginalVideoNodeSetEntry);
-    YTKACEInstallInstanceHook(@"YTVideoWithContextNode", @"yt_height",
-                              (IMP)YTKACEVideoNodeHeight,
-                              &OriginalVideoNodeHeight);
-    YTKACEInstallInstanceHook(@"YTVideoWithContextNode", @"yt_size",
-                              (IMP)YTKACEVideoNodeSize,
-                              &OriginalVideoNodeSize);
-    YTKACEInstallInstanceHook(@"YTVideoWithContextNode",
-                              @"shouldShrinkDismissalView",
-                              (IMP)YTKACEVideoNodeShouldShrink,
-                              &OriginalVideoNodeShrink);
-    YTKACEInstallPromotedCellHooks();
-    YTKACEInstallInstanceHook(@"_ASCollectionViewCell",
-                              @"layoutSubviews",
-                              (IMP)YTKACEAdCellLayoutSubviews,
-                              &OriginalAdCellLayout);
-    YTKACEInstallInstanceHook(@"_ASCollectionViewCell",
-                              @"prepareForReuse",
-                              (IMP)YTKACEAdCellPrepareForReuse,
-                              &OriginalAdCellReuse);
     YTKACEInstallInstanceHook(@"YTGlobalConfig",
                               @"shouldBlockUpgradeDialog",
                               (IMP)YTKACEShouldBlockUpgradeDialog,

@@ -31,6 +31,7 @@ static NSString *YTKACEOLEDOriginalKey(id receiver, SEL selector) {
 }
 
 static NSMutableDictionary<NSString *, UIColor *> *s_dynamicColorCache = nil;
+static os_unfair_lock s_dynamicColorLock = OS_UNFAIR_LOCK_INIT;
 static NSRegularExpression *s_qualityPattern = nil;
 static dispatch_once_t s_qualityPatternOnceToken;
 
@@ -57,17 +58,24 @@ static UIColor *YTKACEOLEDColor(id receiver, SEL selector) {
     UIColor *base = original == NULL
         ? nil
         : ((id (*)(id, SEL))original)(receiver, selector);
-    NSInteger preset = [NSUserDefaults.standardUserDefaults integerForKey:YTKACEThemePresetKey];
+    id presetVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
+    NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
     BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
     if (!oledEnabled && preset == 0) return base;
 
     const char *selName = sel_getName(selector) ?: "";
     NSString *cacheKey = [NSString stringWithFormat:@"%s|%ld|%d", selName, (long)preset, oledEnabled];
+    
+    os_unfair_lock_lock(&s_dynamicColorLock);
     if (s_dynamicColorCache == nil) {
         s_dynamicColorCache = [NSMutableDictionary dictionary];
     }
     UIColor *cached = s_dynamicColorCache[cacheKey];
-    if (cached != nil) return cached;
+    if (cached != nil) {
+        os_unfair_lock_unlock(&s_dynamicColorLock);
+        return cached;
+    }
+    os_unfair_lock_unlock(&s_dynamicColorLock);
 
     BOOL isSurface = YTKACEIsSurfaceSelector(selector);
     UIColor *dynamicColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
@@ -76,7 +84,11 @@ static UIColor *YTKACEOLEDColor(id receiver, SEL selector) {
         }
         return base ?: UIColor.blackColor;
     }];
+
+    os_unfair_lock_lock(&s_dynamicColorLock);
     s_dynamicColorCache[cacheKey] = dynamicColor;
+    os_unfair_lock_unlock(&s_dynamicColorLock);
+
     return dynamicColor;
 }
 

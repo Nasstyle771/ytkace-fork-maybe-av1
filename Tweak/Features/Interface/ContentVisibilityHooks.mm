@@ -1796,14 +1796,6 @@ void YTKACEInstallContentVisibilityHooks(void) {
                               @"didMoveToWindow",
                               (IMP)YTKACEActionCellDidMove,
                               &OriginalActionCellDidMove);
-    YTKACEInstallInstanceHook(@"_ASDisplayView",
-                              @"didMoveToWindow",
-                              (IMP)YTKACEDisplayViewDidMove,
-                              &OriginalDisplayViewDidMove);
-    YTKACEInstallInstanceHook(@"_ASDisplayView",
-                              @"setAccessibilityIdentifier:",
-                              (IMP)YTKACEDisplayViewSetIdentifier,
-                              &OriginalDisplayViewSetIdentifier);
     YTKACEInstallInstanceHook(@"YTInnerTubeCollectionViewController",
                               @"addSectionsFromArray:",
                               (IMP)YTKACEAddSections,
