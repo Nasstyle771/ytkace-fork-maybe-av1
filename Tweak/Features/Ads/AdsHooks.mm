@@ -499,7 +499,7 @@ static void YTKACESectionListLoadWithModel(id receiver, SEL selector, id model) 
     if (YTKACEFeatureEnabled(YTKACENoAdsKey) && [model respondsToSelector:@selector(contentsArray)]) {
         NSMutableArray *contents = ((id (*)(id, SEL))objc_msgSend)(model, @selector(contentsArray));
         if ([contents isKindOfClass:NSMutableArray.class]) {
-            NSIndexSet *removeIndexes = [contents indexesOfObjectsPassingTest:^BOOL(id section, NSUInteger idx, BOOL *stop) {
+            NSIndexSet *removeIndexes = [contents indexesOfObjectsPassingTest:^BOOL(id section, __unused NSUInteger idx, __unused BOOL *stop) {
                 id sectionRenderer = [section respondsToSelector:@selector(itemSectionRenderer)]
                     ? ((id (*)(id, SEL))objc_msgSend)(section, @selector(itemSectionRenderer))
                     : section;
