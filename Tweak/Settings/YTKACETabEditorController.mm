@@ -325,8 +325,7 @@ commitEditingStyle:(UITableViewCellEditingStyle)editingStyle
     for (NSDictionary *tab in self.activeTabs) {
         [order addObject:tab[@"token"]];
     }
-    [NSUserDefaults.standardUserDefaults setObject:order forKey:@"YTKACE.Preference.Tabs.Order"];
-    YTKACESyncDefaults();
+    YTKACESetPreferenceObject(@"YTKACE.Preference.Tabs.Order", order);
     [NSNotificationCenter.defaultCenter postNotificationName:@"YTKACETabConfigDidChange" object:nil];
 }
 

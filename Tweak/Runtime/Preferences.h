@@ -46,6 +46,7 @@ FOUNDATION_EXPORT BOOL YTKACESponsorBlockEnabled(void);
 FOUNDATION_EXPORT void YTKACESetPreference(NSString *key, BOOL enabled);
 FOUNDATION_EXPORT id _Nullable YTKACEPreferenceObject(NSString *key);
 FOUNDATION_EXPORT void YTKACESetPreferenceObject(NSString *key, id _Nullable value);
+FOUNDATION_EXPORT void YTKACESyncDefaults(void);
 FOUNDATION_EXPORT NSURL *YTKACEApplicationSupportDirectory(void);
 
 NS_ASSUME_NONNULL_END
