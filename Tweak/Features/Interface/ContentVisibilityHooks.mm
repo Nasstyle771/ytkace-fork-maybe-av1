@@ -318,8 +318,29 @@ static id YTKACEActionCellControllerInit(id receiver, SEL selector,
     return result;
 }
 
-static NSArray<NSString *> *YTKACEActionButtonIdentifiers(UIView *view);
-static BOOL YTKACEIsActionButtonIdentifier(NSString *identifier);
+static BOOL YTKACEIsActionButtonIdentifier(NSString *identifier) {
+    if (identifier.length == 0) return NO;
+    NSString *lower = identifier.lowercaseString;
+    if (![lower hasPrefix:@"id."]) return NO;
+    return [lower containsString:@"button"];
+}
+
+static NSArray<NSString *> *YTKACEActionButtonIdentifiers(UIView *view) {
+    if (view == nil) return @[];
+    NSMutableOrderedSet<NSString *> *found = [NSMutableOrderedSet orderedSet];
+    NSMutableArray<UIView *> *pending = [NSMutableArray arrayWithObject:view];
+    NSUInteger visited = 0;
+    while (pending.count != 0 && visited < 160) {
+        UIView *node = pending.firstObject;
+        [pending removeObjectAtIndex:0];
+        visited++;
+        if (YTKACEIsActionButtonIdentifier(node.accessibilityIdentifier)) {
+            [found addObject:node.accessibilityIdentifier];
+        }
+        [pending addObjectsFromArray:node.subviews];
+    }
+    return found.array;
+}
 
 static NSString *YTKACEPreferenceForButtonIdentifier(NSString *identifier) {
     NSString *token = [[identifier lowercaseString]
