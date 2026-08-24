@@ -146,7 +146,15 @@ void YTKACERegisterDefaults(void) {
     [YTKACEDefaults() registerDefaults:defaultDict];
     os_unfair_lock_lock(&s_prefLock);
     if (s_prefCache == nil) {
-        s_prefCache = [defaultDict mutableCopy];
+        s_prefCache = [NSMutableDictionary dictionary];
+        for (NSString *key in defaultDict) {
+            id existing = [YTKACEDefaults() objectForKey:key];
+            if (existing != nil) {
+                s_prefCache[key] = existing;
+            } else {
+                s_prefCache[key] = defaultDict[key];
+            }
+        }
     }
     os_unfair_lock_unlock(&s_prefLock);
     if ((!hasLeftAction || !hasRightAction) &&
@@ -472,10 +480,12 @@ void YTKACESetPreference(NSString *key, BOOL enabled) {
 
     if ([key isEqualToString:YTKACEMasterEnabledKey]) {
         [YTKACEDefaults() setBool:YES forKey:key];
+        [YTKACEDefaults() synchronize];
         YTKACEAnnouncePreferenceChange(key);
         return;
     }
     [YTKACEDefaults() setBool:enabled forKey:key];
+    [YTKACEDefaults() synchronize];
     YTKACEAnnouncePreferenceChange(key);
 }
 
@@ -517,6 +527,7 @@ void YTKACESetPreferenceObject(NSString *key, id value) {
     } else {
         [YTKACEDefaults() setObject:value forKey:key];
     }
+    [YTKACEDefaults() synchronize];
     YTKACEAnnouncePreferenceChange(key);
 }
 
