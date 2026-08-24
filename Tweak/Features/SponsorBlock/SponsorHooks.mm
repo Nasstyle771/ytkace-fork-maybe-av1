@@ -50,6 +50,9 @@ static os_unfair_lock YTKACESponsorVectorLock = OS_UNFAIR_LOCK_INIT;
 }
 @end
 
+@implementation YTKACEFastSegmentContainer
+@end
+
 static void YTKACERefreshPlaybackTimePreferenceState(void) {
     YTKACESponsorTimeUpdatesEnabled =
         YTKACEFeatureEnabled(YTKACESponsorBlockKey);
