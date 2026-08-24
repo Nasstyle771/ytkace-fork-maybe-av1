@@ -14,10 +14,6 @@ static IMP OriginalDisplayLinkSetPreferredFrameRateRange;
 static IMP OriginalDisplayLinkSetPreferredFramesPerSecond;
 static IMP OriginalLayerSetPreferredFrameRateRange;
 static IMP OriginalAnimationSetPreferredFrameRateRange;
-static IMP OriginalScrollViewDidMoveToWindow;
-static IMP OriginalCollectionViewCellDidMoveToWindow;
-static IMP OriginalTableViewCellDidMoveToWindow;
-static IMP OriginalASDisplayViewDidMoveToWindow;
 
 static id YTKACEObjectForInfoDictionaryKey(NSBundle *receiver, SEL selector, NSString *key) {
     if ([key isEqualToString:@"CADisableMinimumFrameDurationOnPhone"] ||
