@@ -281,6 +281,8 @@ static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
     AVFormatContext *output = NULL;
     AVPacket *packet = NULL;
     AVDictionary *options = NULL;
+    int *streamMapping = NULL;
+    int outStreamCount = 0;
     NSString *stage = @"Open media";
     int result = avformat_open_input(&input, mediaURL.fileSystemRepresentation, NULL, NULL);
     if (result < 0) goto cleanup;
@@ -294,7 +296,7 @@ static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
         goto cleanup;
     }
 
-    int *streamMapping = (int *)av_calloc(input->nb_streams, sizeof(int));
+    streamMapping = (int *)av_calloc(input->nb_streams, sizeof(int));
     if (!streamMapping) {
         result = AVERROR(ENOMEM);
         goto cleanup;
@@ -303,20 +305,17 @@ static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
         streamMapping[i] = -1;
     }
 
-    int outStreamCount = 0;
     for (unsigned int i = 0; i < input->nb_streams; i++) {
         AVStream *inStream = input->streams[i];
         enum YTKACEFFmpegMediaType type = inStream->codecpar->codec_type;
         if (type == AVMEDIA_TYPE_VIDEO || type == AVMEDIA_TYPE_AUDIO || type == AVMEDIA_TYPE_SUBTITLE) {
             AVStream *outStream = avformat_new_stream(output, NULL);
             if (!outStream) {
-                av_free(streamMapping);
                 result = AVERROR(ENOMEM);
                 goto cleanup;
             }
             result = avcodec_parameters_copy(outStream->codecpar, inStream->codecpar);
             if (result < 0) {
-                av_free(streamMapping);
                 goto cleanup;
             }
             outStream->codecpar->codec_tag = 0;
@@ -326,7 +325,6 @@ static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
     }
 
     if (outStreamCount == 0) {
-        av_free(streamMapping);
         result = AVERROR_STREAM_NOT_FOUND;
         goto cleanup;
     }
@@ -335,7 +333,6 @@ static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
         result = avio_open(&output->pb, outputURL.fileSystemRepresentation, AVIO_FLAG_WRITE);
         stage = @"Open output";
         if (result < 0) {
-            av_free(streamMapping);
             goto cleanup;
         }
     }
@@ -345,13 +342,11 @@ static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
     result = avformat_write_header(output, &options);
     stage = @"Write header";
     if (result < 0) {
-        av_free(streamMapping);
         goto cleanup;
     }
 
     packet = av_packet_alloc();
     if (!packet) {
-        av_free(streamMapping);
         result = AVERROR(ENOMEM);
         goto cleanup;
     }
@@ -374,7 +369,6 @@ static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
             break;
         }
     }
-    av_free(streamMapping);
     if (result == AVERROR_EOF) result = 0;
     if (result < 0) goto cleanup;
 
@@ -382,6 +376,10 @@ static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
     stage = @"Write trailer";
 
 cleanup:
+    if (streamMapping != NULL) {
+        av_free(streamMapping);
+        streamMapping = NULL;
+    }
     av_dict_free(&options);
     av_packet_free(&packet);
     avformat_close_input(&input);
