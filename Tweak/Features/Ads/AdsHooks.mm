@@ -460,8 +460,6 @@ static BOOL YTKACEObjectLooksLikeAd(id object) {
 
 static const void *YTKACEAdCellAssociation = &YTKACEAdCellAssociation;
 
-typedef struct {
-    NSUInteger unit;
 void YTKACECollapseHostCell(UIView *view) {
     if (view == nil) return;
     view.hidden = YES;
@@ -622,20 +620,6 @@ static void YTKACEInstallBooleanHookOrMethod(NSString *className,
             originalStorage
         )) {
         YTKACEAddInstanceMethod(className, selectorName, replacement, "B@:");
-    }
-}
-
-static void YTKACEAdCellLayoutSubviews(UIView *receiver, SEL selector) {
-    if (OriginalAdCellLayout != NULL) {
-        ((void (*)(id, SEL))OriginalAdCellLayout)(receiver, selector);
-    }
-    YTKACEHandleAdCellLayout(receiver);
-}
-
-static void YTKACEAdCellPrepareForReuse(UIView *receiver, SEL selector) {
-    YTKACEHandleAdCellReuse(receiver);
-    if (OriginalAdCellReuse != NULL) {
-        ((void (*)(id, SEL))OriginalAdCellReuse)(receiver, selector);
     }
 }
 
