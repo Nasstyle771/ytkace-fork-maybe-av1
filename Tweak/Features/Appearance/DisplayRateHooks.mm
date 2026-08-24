@@ -105,12 +105,65 @@ static void YTKACEAnimationSetPreferredFrameRateRange(CAAnimation *receiver,
     }
 }
 
+struct YTKACEASRangeTuningParams {
+    CGFloat leadingBufferScreenfuls;
+    CGFloat trailingBufferScreenfuls;
+};
+
+static IMP OriginalCollectionNodeRangeTuning;
+static struct YTKACEASRangeTuningParams YTKACECollectionNodeRangeTuning(id receiver, SEL selector, NSInteger rangeType) {
+    (void)receiver;
+    (void)selector;
+    struct YTKACEASRangeTuningParams params;
+    // rangeType 0 = FetchData (network download) -> 4.0 screenfuls ahead
+    // rangeType 1 = Display (render bitmaps/layers) -> 2.5 screenfuls ahead
+    if (rangeType == 0) {
+        params.leadingBufferScreenfuls = 4.0f;
+        params.trailingBufferScreenfuls = 1.0f;
+    } else {
+        params.leadingBufferScreenfuls = 2.5f;
+        params.trailingBufferScreenfuls = 0.5f;
+    }
+    return params;
+}
+
+static IMP OriginalCollectionViewLeadingScreens;
+static CGFloat YTKACECollectionViewLeadingScreens(id receiver, SEL selector) {
+    (void)receiver;
+    (void)selector;
+    return 4.0f; // Batch-load next page 4 screens before reaching the bottom
+}
+
+static BOOL YTKACEAlwaysYes(id receiver, SEL selector) {
+    (void)receiver;
+    (void)selector;
+    return YES;
+}
+
+static CGFloat YTKACELeadTime(id receiver, SEL selector) {
+    (void)receiver;
+    (void)selector;
+    return 15.0f;
+}
+
+static NSInteger YTKACEPrefetchCount(id receiver, SEL selector) {
+    (void)receiver;
+    (void)selector;
+    return 5;
+}
+
+static CGFloat YTKACEScrollDistance(id receiver, SEL selector) {
+    (void)receiver;
+    (void)selector;
+    return 3000.0f;
+}
+
 void YTKACEInstallDisplayRateHooks(void) {
     static dispatch_once_t cacheToken;
     dispatch_once(&cacheToken, ^{
         NSURLCache *shared = [[NSURLCache alloc] initWithMemoryCapacity:256 * 1024 * 1024
                                                            diskCapacity:1024 * 1024 * 1024
-                                                               diskPath:nil];
+                                                                diskPath:nil];
         [NSURLCache setSharedURLCache:shared];
         [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidReceiveMemoryWarningNotification
                                                         object:nil
@@ -149,4 +202,36 @@ void YTKACEInstallDisplayRateHooks(void) {
                               @"setPreferredFrameRateRange:",
                               (IMP)YTKACEAnimationSetPreferredFrameRateRange,
                               &OriginalAnimationSetPreferredFrameRateRange);
+
+    for (NSString *nodeClass in @[@"ASCollectionNode", @"ASTableNode"]) {
+        YTKACEInstallInstanceHook(nodeClass,
+                                  @"rangeTuningParametersForRangeType:",
+                                  (IMP)YTKACECollectionNodeRangeTuning,
+                                  &OriginalCollectionNodeRangeTuning);
+    }
+
+    YTKACEInstallInstanceHook(@"ASCollectionView",
+                              @"leadingScreensForBatching",
+                              (IMP)YTKACECollectionViewLeadingScreens,
+                              &OriginalCollectionViewLeadingScreens);
+
+    for (NSString *configClass in @[@"YTColdConfig", @"YTHotConfig", @"YTGlobalConfig"]) {
+        YTKACEInstallInstanceHook(configClass, @"enableFeedPrefetch", (IMP)YTKACEAlwaysYes, NULL);
+        YTKACEInstallInstanceHook(configClass, @"feedPrefetchLeadTime", (IMP)YTKACELeadTime, NULL);
+        YTKACEInstallInstanceHook(configClass, @"enablePrefetchPrebuffer", (IMP)YTKACEAlwaysYes, NULL);
+        YTKACEInstallInstanceHook(configClass, @"prefetchPrebufferPlaybackLeadSeconds", (IMP)YTKACELeadTime, NULL);
+        YTKACEInstallInstanceHook(configClass, @"preloadPlaybackControllerEnabled", (IMP)YTKACEAlwaysYes, NULL);
+        YTKACEInstallInstanceHook(configClass, @"minVideosToPrefetch", (IMP)YTKACEPrefetchCount, NULL);
+        YTKACEInstallInstanceHook(configClass, @"inlineMutedPlaybackMaxPrebufferedSeconds", (IMP)YTKACELeadTime, NULL);
+        YTKACEInstallInstanceHook(configClass, @"enableWatchNextPreload", (IMP)YTKACEAlwaysYes, NULL);
+        YTKACEInstallInstanceHook(configClass, @"enablePrefetchOnScroll", (IMP)YTKACEAlwaysYes, NULL);
+        YTKACEInstallInstanceHook(configClass, @"feedPrefetchScrollDistance", (IMP)YTKACEScrollDistance, NULL);
+        YTKACEInstallInstanceHook(configClass, @"enableSectionListPrefetch", (IMP)YTKACEAlwaysYes, NULL);
+        YTKACEInstallInstanceHook(configClass, @"isPrefetchEnabled", (IMP)YTKACEAlwaysYes, NULL);
+    }
+
+    for (NSString *ctrlClass in @[@"YTSectionListViewController", @"YTInnerTubeCollectionViewController"]) {
+        YTKACEInstallInstanceHook(ctrlClass, @"shouldPreloadNextPage", (IMP)YTKACEAlwaysYes, NULL);
+        YTKACEInstallInstanceHook(ctrlClass, @"prefetchesItemSectionControllers", (IMP)YTKACEAlwaysYes, NULL);
+    }
 }
