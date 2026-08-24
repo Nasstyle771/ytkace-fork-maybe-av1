@@ -250,6 +250,7 @@ BOOL YTKACEIsLightMode(UITraitCollection *traits) {
 }
 
 BOOL YTKACEOLEDActive(UITraitCollection *traits) {
+    (void)traits;
     BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
     id themeVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
     NSInteger themePreset = [themeVal respondsToSelector:@selector(integerValue)] ? [themeVal integerValue] : 0;
