@@ -500,6 +500,179 @@ NSString *YTKACEPickerSummary(NSString *key,
 
 @end
 
+@interface YTKACEBaseSettingsCell : UITableViewCell
+@property(nonatomic, strong) id boundItem;
+- (void)prepareForReuse NS_REQUIRES_SUPER;
+@end
+
+@implementation YTKACEBaseSettingsCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.textLabel.font = [UIFont systemFontOfSize:17.0];
+        self.detailTextLabel.font = [UIFont systemFontOfSize:12.0];
+        self.textLabel.textColor = UIColor.labelColor;
+        self.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+        self.backgroundColor = YTKACESettingsCellBackground();
+    }
+    return self;
+}
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.boundItem = nil;
+    self.textLabel.text = nil;
+    self.detailTextLabel.text = nil;
+    self.accessoryType = UITableViewCellAccessoryNone;
+    self.selectionStyle = UITableViewCellSelectionStyleDefault;
+}
+@end
+
+@interface YTKACEToggleOptionCell : YTKACEBaseSettingsCell
+@property(nonatomic, strong) UISwitch *toggleSwitch;
+@end
+
+@implementation YTKACEToggleOptionCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        _toggleSwitch = [UISwitch new];
+        _toggleSwitch.transform = CGAffineTransformMakeScale(0.95, 0.95);
+        self.accessoryView = _toggleSwitch;
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+    }
+    return self;
+}
+@end
+
+@interface YTKACEStepperOptionCell : YTKACEBaseSettingsCell
+@property(nonatomic, strong) UIStepper *stepper;
+@end
+
+@implementation YTKACEStepperOptionCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        _stepper = [UIStepper new];
+        self.accessoryView = _stepper;
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+    }
+    return self;
+}
+@end
+
+@interface YTKACEStackedSliderOptionCell : YTKACEBaseSettingsCell
+@property(nonatomic, strong) UILabel *captionLabel;
+@property(nonatomic, strong) UILabel *readoutLabel;
+@property(nonatomic, strong) UISlider *slider;
+@property(nonatomic, strong) UIButton *minusButton;
+@property(nonatomic, strong) UIButton *plusButton;
+@property(nonatomic, strong) UIStackView *containerView;
+@end
+
+@implementation YTKACEStackedSliderOptionCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+
+        _captionLabel = [UILabel new];
+        _captionLabel.font = [UIFont systemFontOfSize:16.0];
+        _captionLabel.textColor = UIColor.labelColor;
+
+        _readoutLabel = [UILabel new];
+        _readoutLabel.font = [UIFont monospacedDigitSystemFontOfSize:15.0 weight:UIFontWeightSemibold];
+        _readoutLabel.textAlignment = NSTextAlignmentRight;
+        [_readoutLabel setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                                       forAxis:UILayoutConstraintAxisHorizontal];
+
+        _slider = [UISlider new];
+
+        UIImageSymbolConfiguration *glyph =
+            [UIImageSymbolConfiguration configurationWithPointSize:14.0
+                                                            weight:UIImageSymbolWeightSemibold];
+
+        _minusButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        _minusButton.tag = -1;
+        [_minusButton setImage:[UIImage systemImageNamed:@"minus" withConfiguration:glyph]
+                      forState:UIControlStateNormal];
+        [_minusButton.widthAnchor constraintEqualToConstant:30.0].active = YES;
+
+        _plusButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        _plusButton.tag = 1;
+        [_plusButton setImage:[UIImage systemImageNamed:@"plus" withConfiguration:glyph]
+                      forState:UIControlStateNormal];
+        [_plusButton.widthAnchor constraintEqualToConstant:30.0].active = YES;
+
+        UIStackView *heading = [[UIStackView alloc] initWithArrangedSubviews:@[_captionLabel, _readoutLabel]];
+        heading.axis = UILayoutConstraintAxisHorizontal;
+        heading.spacing = 8.0;
+
+        UIStackView *track = [[UIStackView alloc] initWithArrangedSubviews:@[_minusButton, _slider, _plusButton]];
+        track.axis = UILayoutConstraintAxisHorizontal;
+        track.alignment = UIStackViewAlignmentCenter;
+        track.spacing = 10.0;
+
+        _containerView = [[UIStackView alloc] initWithArrangedSubviews:@[heading, track]];
+        _containerView.axis = UILayoutConstraintAxisVertical;
+        _containerView.spacing = 6.0;
+        _containerView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:_containerView];
+
+        UILayoutGuide *guide = self.contentView.layoutMarginsGuide;
+        [NSLayoutConstraint activateConstraints:@[
+            [_containerView.leadingAnchor constraintEqualToAnchor:guide.leadingAnchor],
+            [_containerView.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor],
+            [_containerView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:8.0],
+            [_containerView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-8.0]
+        ]];
+    }
+    return self;
+}
+@end
+
+@interface YTKACEInlineSliderOptionCell : YTKACEBaseSettingsCell
+@property(nonatomic, strong) UISlider *slider;
+@property(nonatomic, strong) UILabel *valueLabel;
+@property(nonatomic, strong) UIView *accessoryContainer;
+@end
+
+@implementation YTKACEInlineSliderOptionCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        _accessoryContainer = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, 158.0, 46.0)];
+        _slider = [[UISlider alloc] initWithFrame:CGRectMake(0.0, 0.0, 158.0, 30.0)];
+        _valueLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0, 28.0, 158.0, 14.0)];
+        _valueLabel.font = [UIFont systemFontOfSize:10.0];
+        _valueLabel.textColor = UIColor.tertiaryLabelColor;
+        _valueLabel.textAlignment = NSTextAlignmentRight;
+        [_accessoryContainer addSubview:_slider];
+        [_accessoryContainer addSubview:_valueLabel];
+        self.accessoryView = _accessoryContainer;
+    }
+    return self;
+}
+@end
+
+@interface YTKACEColorOptionCell : YTKACEBaseSettingsCell
+@property(nonatomic, strong) UIView *colorDot;
+@end
+
+@implementation YTKACEColorOptionCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        _colorDot = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, 28.0, 28.0)];
+        _colorDot.layer.cornerRadius = 14.0;
+        _colorDot.layer.borderWidth = 2.0;
+        _colorDot.layer.borderColor = UIColor.secondaryLabelColor.CGColor;
+        self.accessoryView = _colorDot;
+    }
+    return self;
+}
+@end
+
 @interface YTKACEOptionsController : UITableViewController
     <UIDocumentPickerDelegate, UIColorPickerViewControllerDelegate>
 - (instancetype)initWithTitle:(NSString *)title
@@ -607,179 +780,6 @@ willDisplayHeaderView:(UIView *)view
         header.textLabel.textColor = UIColor.secondaryLabelColor;
     }
 }
-
-@interface YTKACEBaseSettingsCell : UITableViewCell
-@property(nonatomic, strong) id boundItem;
-- (void)prepareForReuse NS_REQUIRES_SUPER;
-@end
-
-@implementation YTKACEBaseSettingsCell
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
-    if (self) {
-        self.textLabel.font = [UIFont systemFontOfSize:17.0];
-        self.detailTextLabel.font = [UIFont systemFontOfSize:12.0];
-        self.textLabel.textColor = UIColor.labelColor;
-        self.detailTextLabel.textColor = UIColor.secondaryLabelColor;
-        self.backgroundColor = YTKACESettingsCellBackground();
-    }
-    return self;
-}
-- (void)prepareForReuse {
-    [super prepareForReuse];
-    self.boundItem = nil;
-    self.textLabel.text = nil;
-    self.detailTextLabel.text = nil;
-    self.accessoryType = UITableViewCellAccessoryNone;
-    self.selectionStyle = UITableViewCellSelectionStyleDefault;
-}
-@end
-
-@interface YTKACEToggleOptionCell : YTKACEBaseSettingsCell
-@property(nonatomic, strong) UISwitch *toggleSwitch;
-@end
-
-@implementation YTKACEToggleOptionCell
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
-    if (self) {
-        _toggleSwitch = [UISwitch new];
-        _toggleSwitch.transform = CGAffineTransformMakeScale(0.95, 0.95);
-        self.accessoryView = _toggleSwitch;
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-    }
-    return self;
-}
-@end
-
-@interface YTKACEStepperOptionCell : YTKACEBaseSettingsCell
-@property(nonatomic, strong) UIStepper *stepper;
-@end
-
-@implementation YTKACEStepperOptionCell
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
-    if (self) {
-        _stepper = [UIStepper new];
-        self.accessoryView = _stepper;
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-    }
-    return self;
-}
-@end
-
-@interface YTKACEStackedSliderOptionCell : YTKACEBaseSettingsCell
-@property(nonatomic, strong) UILabel *captionLabel;
-@property(nonatomic, strong) UILabel *readoutLabel;
-@property(nonatomic, strong) UISlider *slider;
-@property(nonatomic, strong) UIButton *minusButton;
-@property(nonatomic, strong) UIButton *plusButton;
-@property(nonatomic, strong) UIStackView *containerView;
-@end
-
-@implementation YTKACEStackedSliderOptionCell
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
-    if (self) {
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-
-        _captionLabel = [UILabel new];
-        _captionLabel.font = [UIFont systemFontOfSize:16.0];
-        _captionLabel.textColor = UIColor.labelColor;
-
-        _readoutLabel = [UILabel new];
-        _readoutLabel.font = [UIFont monospacedDigitSystemFontOfSize:15.0 weight:UIFontWeightSemibold];
-        _readoutLabel.textAlignment = NSTextAlignmentRight;
-        [_readoutLabel setContentCompressionResistancePriority:UILayoutPriorityRequired
-                                                       forAxis:UILayoutConstraintAxisHorizontal];
-
-        _slider = [UISlider new];
-
-        UIImageSymbolConfiguration *glyph =
-            [UIImageSymbolConfiguration configurationWithPointSize:14.0
-                                                            weight:UIImageSymbolWeightSemibold];
-
-        _minusButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        _minusButton.tag = -1;
-        [_minusButton setImage:[UIImage systemImageNamed:@"minus" withConfiguration:glyph]
-                      forState:UIControlStateNormal];
-        [_minusButton.widthAnchor constraintEqualToConstant:30.0].active = YES;
-
-        _plusButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        _plusButton.tag = 1;
-        [_plusButton setImage:[UIImage systemImageNamed:@"plus" withConfiguration:glyph]
-                     forState:UIControlStateNormal];
-        [_plusButton.widthAnchor constraintEqualToConstant:30.0].active = YES;
-
-        UIStackView *heading = [[UIStackView alloc] initWithArrangedSubviews:@[_captionLabel, _readoutLabel]];
-        heading.axis = UILayoutConstraintAxisHorizontal;
-        heading.spacing = 8.0;
-
-        UIStackView *track = [[UIStackView alloc] initWithArrangedSubviews:@[_minusButton, _slider, _plusButton]];
-        track.axis = UILayoutConstraintAxisHorizontal;
-        track.alignment = UIStackViewAlignmentCenter;
-        track.spacing = 10.0;
-
-        _containerView = [[UIStackView alloc] initWithArrangedSubviews:@[heading, track]];
-        _containerView.axis = UILayoutConstraintAxisVertical;
-        _containerView.spacing = 6.0;
-        _containerView.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:_containerView];
-
-        UILayoutGuide *guide = self.contentView.layoutMarginsGuide;
-        [NSLayoutConstraint activateConstraints:@[
-            [_containerView.leadingAnchor constraintEqualToAnchor:guide.leadingAnchor],
-            [_containerView.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor],
-            [_containerView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:8.0],
-            [_containerView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-8.0]
-        ]];
-    }
-    return self;
-}
-@end
-
-@interface YTKACEInlineSliderOptionCell : YTKACEBaseSettingsCell
-@property(nonatomic, strong) UISlider *slider;
-@property(nonatomic, strong) UILabel *valueLabel;
-@property(nonatomic, strong) UIView *accessoryContainer;
-@end
-
-@implementation YTKACEInlineSliderOptionCell
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
-    if (self) {
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-        _accessoryContainer = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, 158.0, 46.0)];
-        _slider = [[UISlider alloc] initWithFrame:CGRectMake(0.0, 0.0, 158.0, 30.0)];
-        _valueLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0, 28.0, 158.0, 14.0)];
-        _valueLabel.font = [UIFont systemFontOfSize:10.0];
-        _valueLabel.textColor = UIColor.tertiaryLabelColor;
-        _valueLabel.textAlignment = NSTextAlignmentRight;
-        [_accessoryContainer addSubview:_slider];
-        [_accessoryContainer addSubview:_valueLabel];
-        self.accessoryView = _accessoryContainer;
-    }
-    return self;
-}
-@end
-
-@interface YTKACEColorOptionCell : YTKACEBaseSettingsCell
-@property(nonatomic, strong) UIView *colorDot;
-@end
-
-@implementation YTKACEColorOptionCell
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
-    if (self) {
-        _colorDot = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, 28.0, 28.0)];
-        _colorDot.layer.cornerRadius = 14.0;
-        _colorDot.layer.borderWidth = 2.0;
-        _colorDot.layer.borderColor = UIColor.secondaryLabelColor.CGColor;
-        self.accessoryView = _colorDot;
-    }
-    return self;
-}
-@end
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
