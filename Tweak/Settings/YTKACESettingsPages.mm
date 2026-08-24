@@ -154,26 +154,6 @@ static NSDictionary *YTKACEPercentSlider(NSString *title,
     return item;
 }
 
-static UIButton *YTKACEStepControl(BOOL increment,
-                                   UISlider *slider,
-                                   id target,
-                                   SEL action) {
-    UIImageSymbolConfiguration *glyph =
-        [UIImageSymbolConfiguration configurationWithPointSize:14.0
-                                                        weight:UIImageSymbolWeightSemibold];
-    UIButton *control = [UIButton buttonWithType:UIButtonTypeSystem];
-    control.tag = increment ? 1 : -1;
-    control.tintColor = YTKACEAccentColor();
-    [control setImage:[UIImage systemImageNamed:increment ? @"plus" : @"minus"
-                              withConfiguration:glyph]
-             forState:UIControlStateNormal];
-    [control.widthAnchor constraintEqualToConstant:30.0].active = YES;
-    objc_setAssociatedObject(control, YTKACEStepTargetAssociation, slider,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [control addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
-    return control;
-}
-
 static NSString *YTKACETrimmedNumber(double value) {
     NSString *text = [NSString stringWithFormat:@"%.2f", value];
     while ([text containsString:@"."] && [text hasSuffix:@"0"]) {
