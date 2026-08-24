@@ -5,6 +5,7 @@
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <os/lock.h>
 
 static NSMutableDictionary<NSString *, NSValue *> *YTKACEOLEDOriginals;
 static IMP OriginalQualitySheetDidAppear;
