@@ -670,15 +670,6 @@ static void YTKACEScheduleStructuralActionHook(void) {
     }
 }
 
-static UICollectionView *YTKACEActionCollectionView(UIView *view) {
-    for (UIView *candidate = view; candidate != nil; candidate = candidate.superview) {
-        if ([candidate isKindOfClass:UICollectionView.class]) {
-            return (UICollectionView *)candidate;
-        }
-    }
-    return nil;
-}
-
 static void YTKACEActionCellPrepareForReuse(UIView *receiver, SEL selector) {
     NSNumber *baseline = objc_getAssociatedObject(
         receiver, YTKACEContentHiddenAssociation);
