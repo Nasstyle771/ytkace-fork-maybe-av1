@@ -31,10 +31,11 @@ static NSString *YTKACEOLEDOriginalKey(id receiver, SEL selector) {
             NSStringFromSelector(selector)];
 }
 
-static NSMutableDictionary<NSString *, UIColor *> *s_dynamicColorCache = nil;
-static os_unfair_lock s_dynamicColorLock = OS_UNFAIR_LOCK_INIT;
 static NSRegularExpression *s_qualityPattern = nil;
 static dispatch_once_t s_qualityPatternOnceToken;
+static UIColor *s_cachedDynamicSurface = nil;
+static UIColor *s_cachedDynamicBackground = nil;
+static dispatch_once_t s_dynamicColorsOnceToken;
 
 static BOOL YTKACEIsSurfaceSelector(SEL selector) {
     const char *name = sel_getName(selector);
@@ -53,44 +54,32 @@ static BOOL YTKACEIsSurfaceSelector(SEL selector) {
 }
 
 static UIColor *YTKACEOLEDColor(id receiver, SEL selector) {
-    IMP original = YTKACEOLEDImplementation(
-        YTKACEOLEDOriginals[YTKACEOLEDOriginalKey(receiver, selector)]
-    );
-    UIColor *base = original == NULL
-        ? nil
-        : ((id (*)(id, SEL))original)(receiver, selector);
+    BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
     id presetVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
     NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
-    BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
-    if (!oledEnabled && preset == 0) return base;
-
-    const char *selName = sel_getName(selector) ?: "";
-    NSString *cacheKey = [NSString stringWithFormat:@"%s|%ld|%d", selName, (long)preset, oledEnabled];
-    
-    os_unfair_lock_lock(&s_dynamicColorLock);
-    if (s_dynamicColorCache == nil) {
-        s_dynamicColorCache = [NSMutableDictionary dictionary];
+    if (!oledEnabled && preset == 0) {
+        IMP original = YTKACEOLEDImplementation(
+            YTKACEOLEDOriginals[YTKACEOLEDOriginalKey(receiver, selector)]
+        );
+        return original == NULL ? nil : ((id (*)(id, SEL))original)(receiver, selector);
     }
-    UIColor *cached = s_dynamicColorCache[cacheKey];
-    if (cached != nil) {
-        os_unfair_lock_unlock(&s_dynamicColorLock);
-        return cached;
-    }
-    os_unfair_lock_unlock(&s_dynamicColorLock);
 
-    BOOL isSurface = YTKACEIsSurfaceSelector(selector);
-    UIColor *dynamicColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        if (YTKACEOLEDActive(traits)) {
-            return isSurface ? YTKACEThemeSurfaceColor(traits) : YTKACEThemeBackgroundColor(traits);
-        }
-        return base ?: UIColor.blackColor;
-    }];
+    dispatch_once(&s_dynamicColorsOnceToken, ^{
+        s_cachedDynamicSurface = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+            if (YTKACEOLEDActive(traits)) {
+                return YTKACEThemeSurfaceColor(traits);
+            }
+            return UIColor.systemBackgroundColor;
+        }];
+        s_cachedDynamicBackground = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+            if (YTKACEOLEDActive(traits)) {
+                return YTKACEThemeBackgroundColor(traits);
+            }
+            return UIColor.blackColor;
+        }];
+    });
 
-    os_unfair_lock_lock(&s_dynamicColorLock);
-    s_dynamicColorCache[cacheKey] = dynamicColor;
-    os_unfair_lock_unlock(&s_dynamicColorLock);
-
-    return dynamicColor;
+    return YTKACEIsSurfaceSelector(selector) ? s_cachedDynamicSurface : s_cachedDynamicBackground;
 }
 
 static void YTKACERefreshStatusBars(UIViewController *controller) {

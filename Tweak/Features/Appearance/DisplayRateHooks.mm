@@ -44,7 +44,7 @@ static void YTKACEDisplayLinkSetPreferredFrameRateRange(CADisplayLink *receiver,
                                                        CAFrameRateRange range) {
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
-            range = CAFrameRateRangeMake(24.0f, 120.0f, 120.0f);
+            range = CAFrameRateRangeMake(80.0f, 120.0f, 120.0f);
         }
     }
     if (OriginalDisplayLinkSetPreferredFrameRateRange != NULL) {
@@ -81,7 +81,7 @@ static void YTKACELayerSetPreferredFrameRateRange(CALayer *receiver,
                             (s_avSampleBufferClass != Nil && [receiver isKindOfClass:s_avSampleBufferClass]);
         if (!isVideoLayer) {
             if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
-                range = CAFrameRateRangeMake(24.0f, 120.0f, 120.0f);
+                range = CAFrameRateRangeMake(80.0f, 120.0f, 120.0f);
             }
         }
     }
@@ -96,7 +96,7 @@ static void YTKACEAnimationSetPreferredFrameRateRange(CAAnimation *receiver,
                                                      CAFrameRateRange range) {
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
         if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
-            range = CAFrameRateRangeMake(24.0f, 120.0f, 120.0f);
+            range = CAFrameRateRangeMake(80.0f, 120.0f, 120.0f);
         }
     }
     if (OriginalAnimationSetPreferredFrameRateRange != NULL) {
