@@ -80,6 +80,8 @@ static BOOL YTKACEShouldThrottleInterstitial(id receiver, SEL selector) {
 }
 
 static BOOL YTKACENeverShow(id receiver, SEL selector) {
+    (void)receiver;
+    (void)selector;
     return YTKACEHidePromos() ? NO : YES;
 }
 

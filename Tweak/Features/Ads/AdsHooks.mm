@@ -972,7 +972,7 @@ void YTKACEInstallAdsHooks(void) {
                               &OriginalCompanionAd);
     YTKACEInstallInstanceHook(@"YTIElementRenderer",
                               @"hasCompanionAdRenderer",
-                              (IMP)YTKACENoCompanionAdFlag,
+                              (IMP)YTKACEHasCompanionAdRenderer,
                               &OriginalHasCompanionAdRenderer);
     YTKACEInstallInstanceHook(@"YTIElementRenderer",
                               @"hasAppPromoCompanionAdRenderer",
