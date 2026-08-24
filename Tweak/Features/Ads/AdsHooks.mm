@@ -419,10 +419,12 @@ static BOOL YTKACEObjectLooksLikeAd(id object) {
     for (size_t i = 0; i < sizeof(adSelectors) / sizeof(adSelectors[0]); i++) {
         SEL sel = adSelectors[i];
         if ([object respondsToSelector:sel]) {
-            if (((BOOL (*)(id, SEL))objc_msgSend)(object, sel)) {
-                matched = YES;
-                break;
-            }
+            @try {
+                if (((BOOL (*)(id, SEL))objc_msgSend)(object, sel)) {
+                    matched = YES;
+                    break;
+                }
+            } @catch (__unused NSException *e) {}
         }
     }
 
