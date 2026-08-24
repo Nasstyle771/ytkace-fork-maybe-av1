@@ -122,6 +122,14 @@ static NSData *YTKACEJPEGData(NSURL *URL) {
           category:(NSString *)category
         completion:(YTKACEMediaImportCompletion)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        __block UIBackgroundTaskIdentifier bgTask = [UIApplication.sharedApplication
+            beginBackgroundTaskWithName:@"YTKACEMediaImport" expirationHandler:^{
+                if (bgTask != UIBackgroundTaskInvalid) {
+                    [UIApplication.sharedApplication endBackgroundTask:bgTask];
+                    bgTask = UIBackgroundTaskInvalid;
+                }
+            }];
+
         BOOL audioCategory = [category isEqualToString:@"Audio"];
         NSSet *mediaExtensions = audioCategory
             ? YTKACEAudioExtensions() : YTKACEVideoExtensions();
@@ -211,6 +219,10 @@ static NSData *YTKACEJPEGData(NSURL *URL) {
         }
         if (imported == 0 && lastError == nil) {
             lastError = YTKACEImportError(@"No matching media was selected");
+        }
+        if (bgTask != UIBackgroundTaskInvalid && bgTask != 0) {
+            [UIApplication.sharedApplication endBackgroundTask:bgTask];
+            bgTask = UIBackgroundTaskInvalid;
         }
         dispatch_async(dispatch_get_main_queue(), ^{
             [NSNotificationCenter.defaultCenter

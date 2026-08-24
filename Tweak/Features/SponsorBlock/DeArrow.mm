@@ -118,19 +118,26 @@ static id YTKACECellRoot(id node) {
 }
 
 static NSString *YTKACEVideoIDFromURL(NSString *absolute) {
-    if (absolute.length == 0) return nil;
-    if ([absolute rangeOfString:@"/vi"].location == NSNotFound) return nil;
-    static NSRegularExpression *expression;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        expression = [NSRegularExpression regularExpressionWithPattern:
-            @"/(?:vi|vi_webp)/([A-Za-z0-9_-]{11})/" options:0 error:nil];
-    });
-    NSTextCheckingResult *match =
-        [expression firstMatchInString:absolute options:0
-                                 range:NSMakeRange(0, absolute.length)];
-    if (match.numberOfRanges < 2) return nil;
-    return [absolute substringWithRange:[match rangeAtIndex:1]];
+    if (absolute.length < 16) return nil;
+    NSRange range = [absolute rangeOfString:@"/vi/"];
+    NSUInteger offset = 4;
+    if (range.location == NSNotFound) {
+        range = [absolute rangeOfString:@"/vi_webp/"];
+        offset = 9;
+    }
+    if (range.location != NSNotFound && range.location + offset + 11 <= absolute.length) {
+        NSString *candidate = [absolute substringWithRange:NSMakeRange(range.location + offset, 11)];
+        BOOL valid = YES;
+        for (NSUInteger i = 0; i < 11; i++) {
+            unichar c = [candidate characterAtIndex:i];
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) {
+                valid = NO;
+                break;
+            }
+        }
+        if (valid) return candidate;
+    }
+    return nil;
 }
 
 static NSString *YTKACEURLString(id value) {

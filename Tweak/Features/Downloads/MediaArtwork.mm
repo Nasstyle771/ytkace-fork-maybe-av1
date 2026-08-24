@@ -3,12 +3,16 @@
 #import <AVFoundation/AVFoundation.h>
 
 NSData *YTKACEMediaArtworkData(NSURL *URL) {
+    if (URL == nil || URL.path.length == 0) return nil;
     NSURL *base = URL.URLByDeletingPathExtension;
-    for (NSString *extension in @[@"jpg", @"png"]) {
-        NSData *data = [NSData dataWithContentsOfURL:
-            [base URLByAppendingPathExtension:extension]];
-        if (data.length != 0) return data;
+    for (NSString *extension in @[@"jpg", @"jpeg", @"png"]) {
+        NSString *sidecarPath = [base.path stringByAppendingPathExtension:extension];
+        if ([NSFileManager.defaultManager fileExistsAtPath:sidecarPath]) {
+            NSData *data = [NSData dataWithContentsOfFile:sidecarPath];
+            if (data.length != 0) return data;
+        }
     }
+    if (![NSFileManager.defaultManager fileExistsAtPath:URL.path]) return nil;
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:URL options:nil];
     NSArray<AVMetadataItem *> *items = [AVMetadataItem
         metadataItemsFromArray:asset.commonMetadata
@@ -26,6 +30,7 @@ UIImage *YTKACEMediaArtworkImage(NSURL *URL) {
     dispatch_once(&onceToken, ^{
         s_artworkCache = [NSCache new];
         s_artworkCache.countLimit = 64;
+        s_artworkCache.totalCostLimit = 32 * 1024 * 1024;
     });
     UIImage *cached = [s_artworkCache objectForKey:URL];
     if (cached != nil) return cached;
@@ -34,7 +39,8 @@ UIImage *YTKACEMediaArtworkImage(NSURL *URL) {
     if (data.length == 0) return nil;
     UIImage *image = [UIImage imageWithData:data];
     if (image != nil) {
-        [s_artworkCache setObject:image forKey:URL];
+        NSUInteger cost = (NSUInteger)(image.size.width * image.size.height * 4);
+        [s_artworkCache setObject:image forKey:URL cost:cost];
     }
     return image;
 }

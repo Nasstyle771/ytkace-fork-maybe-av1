@@ -69,13 +69,20 @@ static void YTKACEDisplayLinkSetPreferredFramesPerSecond(CADisplayLink *receiver
     }
 }
 
+static Class s_avPlayerLayerClass = Nil;
+static Class s_avSampleBufferClass = Nil;
+static dispatch_once_t s_videoClassOnceToken;
+
 static void YTKACELayerSetPreferredFrameRateRange(CALayer *receiver,
                                                  SEL selector,
                                                  CAFrameRateRange range) {
     if (YTKACEFeatureEnabled(YTKACEForce120HzKey)) {
-        NSString *className = NSStringFromClass(receiver.class);
-        BOOL isVideoLayer = [className containsString:@"AVPlayerLayer"] ||
-                            [className containsString:@"AVSampleBufferDisplayLayer"];
+        dispatch_once(&s_videoClassOnceToken, ^{
+            s_avPlayerLayerClass = objc_getClass("AVPlayerLayer");
+            s_avSampleBufferClass = objc_getClass("AVSampleBufferDisplayLayer");
+        });
+        BOOL isVideoLayer = (s_avPlayerLayerClass != Nil && [receiver isKindOfClass:s_avPlayerLayerClass]) ||
+                            (s_avSampleBufferClass != Nil && [receiver isKindOfClass:s_avSampleBufferClass]);
         if (!isVideoLayer) {
             if (range.maximum >= 59.0f || range.preferred >= 59.0f) {
                 range = CAFrameRateRangeMake(24.0f, 120.0f, 120.0f);
@@ -124,9 +131,8 @@ static BOOL YTKACEMutedIsPlaybackAllowed(id receiver, SEL selector) {
 
 static void YTKACESetLayerFrameRateRange(CALayer *layer, CAFrameRateRange range) {
     if (layer == nil) return;
-    static SEL setRangeSel = NSSelectorFromString(@"setPreferredFrameRateRange:");
-    if ([layer respondsToSelector:setRangeSel]) {
-        ((void (*)(id, SEL, CAFrameRateRange))objc_msgSend)(layer, setRangeSel, range);
+    if (@available(iOS 15.0, *)) {
+        layer.preferredFrameRateRange = range;
     }
 }
 
@@ -153,7 +159,7 @@ static void YTKACEScrollViewDidMoveToWindow(UIScrollView *receiver, SEL selector
         }
         if (@available(iOS 15.0, *)) {
             receiver.panGestureRecognizer.allowedTouchTypes = @[@(UITouchTypeDirect)];
-            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(24.0f, 120.0f, 120.0f));
+            YTKACESetLayerFrameRateRange(receiver.layer, CAFrameRateRangeMake(60.0f, 120.0f, 120.0f));
         }
     }
 }

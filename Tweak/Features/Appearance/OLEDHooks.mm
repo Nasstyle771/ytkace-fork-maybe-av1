@@ -31,6 +31,8 @@ static NSString *YTKACEOLEDOriginalKey(id receiver, SEL selector) {
 }
 
 static NSMutableDictionary<NSString *, UIColor *> *s_dynamicColorCache = nil;
+static NSRegularExpression *s_qualityPattern = nil;
+static dispatch_once_t s_qualityPatternOnceToken;
 
 static BOOL YTKACEIsSurfaceSelector(SEL selector) {
     const char *name = sel_getName(selector);
@@ -59,7 +61,8 @@ static UIColor *YTKACEOLEDColor(id receiver, SEL selector) {
     BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
     if (!oledEnabled && preset == 0) return base;
 
-    NSString *cacheKey = [NSString stringWithFormat:@"%s|%ld|%d", sel_getName(selector), (long)preset, oledEnabled];
+    const char *selName = sel_getName(selector) ?: "";
+    NSString *cacheKey = [NSString stringWithFormat:@"%s|%ld|%d", selName, (long)preset, oledEnabled];
     if (s_dynamicColorCache == nil) {
         s_dynamicColorCache = [NSMutableDictionary dictionary];
     }
@@ -193,11 +196,13 @@ static void YTKACECollectQualityLabels(UIView *view,
     if ([view isKindOfClass:UILabel.class]) {
         UILabel *label = (UILabel *)view;
         NSString *text = label.text ?: @"";
-        NSRegularExpression *pattern = [NSRegularExpression
-            regularExpressionWithPattern:@"^\\s*\\d{3,4}p(?:60)?" options:0 error:nil];
+        dispatch_once(&s_qualityPatternOnceToken, ^{
+            s_qualityPattern = [NSRegularExpression
+                regularExpressionWithPattern:@"^\\s*\\d{3,4}p(?:60)?" options:0 error:nil];
+        });
         if ([text localizedCaseInsensitiveContainsString:@"quality"] ||
-            [pattern firstMatchInString:text options:0
-                range:NSMakeRange(0, text.length)] != nil) {
+            (s_qualityPattern != nil && [s_qualityPattern firstMatchInString:text options:0
+                range:NSMakeRange(0, text.length)] != nil)) {
             [labels addObject:label];
         }
     }

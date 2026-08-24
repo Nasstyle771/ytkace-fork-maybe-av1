@@ -8,23 +8,28 @@ static IMP OriginalImageNamedBundleTraits;
 static IMP OriginalImageNamedBundle;
 
 static NSBundle *YTKACEInnertubeBundle(void) {
-    NSBundle *main = NSBundle.mainBundle;
-    NSArray<NSString *> *paths = @[
-        [main.resourcePath stringByAppendingPathComponent:@"Innertube_Resources.bundle"],
-        [main.resourcePath stringByAppendingPathComponent:@"Frameworks/Module_Framework.framework/Innertube_Resources.bundle"]
-    ];
-    for (NSString *path in paths) {
-        NSBundle *bundle = [NSBundle bundleWithPath:path];
-        if (bundle != nil) {
-            return bundle;
+    static NSBundle *s_cachedBundle = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSBundle *main = NSBundle.mainBundle;
+        NSArray<NSString *> *paths = @[
+            [main.resourcePath stringByAppendingPathComponent:@"Innertube_Resources.bundle"],
+            [main.resourcePath stringByAppendingPathComponent:@"Frameworks/Module_Framework.framework/Innertube_Resources.bundle"]
+        ];
+        for (NSString *path in paths) {
+            NSBundle *bundle = [NSBundle bundleWithPath:path];
+            if (bundle != nil) {
+                s_cachedBundle = bundle;
+                break;
+            }
         }
-    }
-    return nil;
+    });
+    return s_cachedBundle;
 }
 
 static NSString *YTKACEPremiumName(NSString *name,
                                     UITraitCollection *traits) {
-    BOOL darkName = [name.lowercaseString containsString:@"dark"];
+    BOOL darkName = [name rangeOfString:@"dark" options:NSCaseInsensitiveSearch].location != NSNotFound;
     BOOL darkMode = NO;
     if (@available(iOS 13.0, *)) {
         darkMode = traits.userInterfaceStyle == UIUserInterfaceStyleDark;
@@ -35,13 +40,14 @@ static NSString *YTKACEPremiumName(NSString *name,
 }
 
 static BOOL YTKACEShouldReplaceLogo(NSString *name) {
-    if (!YTKACEFeatureEnabled(@"YTKACE.Preference.Navigation.PremiumLogo") ||
-        ![name isKindOfClass:NSString.class]) {
+    if (![name isKindOfClass:NSString.class]) {
         return NO;
     }
-    NSString *lower = name.lowercaseString;
-    return [lower containsString:@"youtube_logo"] &&
-        ![lower containsString:@"premium"];
+    if (!YTKACEFeatureEnabled(@"YTKACE.Preference.Navigation.PremiumLogo")) {
+        return NO;
+    }
+    return [name rangeOfString:@"youtube_logo" options:NSCaseInsensitiveSearch].location != NSNotFound &&
+           [name rangeOfString:@"premium" options:NSCaseInsensitiveSearch].location == NSNotFound;
 }
 
 static UIImage *YTKACEImageNamedBundleTraits(id receiver,

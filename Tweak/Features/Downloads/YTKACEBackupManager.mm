@@ -335,10 +335,10 @@ static BOOL YTKACEHasBackupSpace(NSURL *URL,
     return NO;
 }
 
-static NSArray<NSDictionary *> *YTKACEBackupEntries(NSError **error) {
+static NSArray<NSDictionary *> *YTKACEBackupEntries(NSURL *tempDir, NSError **error) {
     NSFileManager *manager = NSFileManager.defaultManager;
     NSURL *root = YTKACEApplicationSupportDirectory();
-    NSURL *settingsURL = [root URLByAppendingPathComponent:@"SettingsBackup.plist"];
+    NSURL *settingsURL = [tempDir URLByAppendingPathComponent:@"SettingsBackup.plist"];
     if (![YTKACEBackupSettings() writeToURL:settingsURL atomically:YES]) {
         if (error != NULL) *error = YTKACEBackupError(6, @"Settings could not be saved");
         return nil;
@@ -562,7 +562,7 @@ static void YTKACERestoreDownloads(NSURL *source, NSURL *destination) {
                 NSString *name = [NSString stringWithFormat:@"YTKACE-Backup-%@.zip",
                     [formatter stringFromDate:NSDate.date]];
                 URL = error == nil ? [backups URLByAppendingPathComponent:name] : nil;
-                NSArray *entries = error == nil ? YTKACEBackupEntries(&error) : nil;
+                NSArray *entries = error == nil ? YTKACEBackupEntries(backups, &error) : nil;
                 uint64_t size = entries == nil ? 0 : YTKACEBackupSize(entries);
                 if (entries != nil && !YTKACEHasBackupSpace(backups, size, &error)) {
                     entries = nil;

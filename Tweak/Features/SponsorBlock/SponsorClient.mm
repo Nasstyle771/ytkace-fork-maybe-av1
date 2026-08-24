@@ -1,13 +1,17 @@
 #import "SponsorClient.h"
 #import "SponsorPreferences.h"
 #import <math.h>
+#import <os/lock.h>
 
 @interface YTKACESponsorClient ()
 @property(nonatomic, strong) NSCache<NSString *, NSArray *> *cache;
 @property(nonatomic, strong) NSURLSession *session;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<YTKACESponsorCompletion> *> *inFlight;
 @end
 
-@implementation YTKACESponsorClient
+@implementation YTKACESponsorClient {
+    os_unfair_lock _lock;
+}
 
 + (instancetype)sharedClient {
     static YTKACESponsorClient *client;
@@ -21,14 +25,17 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
+        _lock = OS_UNFAIR_LOCK_INIT;
         _cache = [NSCache new];
-        _cache.countLimit = 128;
+        _cache.countLimit = 256;
+        _inFlight = [NSMutableDictionary dictionary];
 
         NSURLSessionConfiguration *configuration =
             NSURLSessionConfiguration.ephemeralSessionConfiguration;
-        configuration.timeoutIntervalForRequest = 3.0;
-        configuration.timeoutIntervalForResource = 5.0;
+        configuration.timeoutIntervalForRequest = 4.0;
+        configuration.timeoutIntervalForResource = 6.0;
         configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+        configuration.HTTPMaximumConnectionsPerHost = 4;
         _session = [NSURLSession sessionWithConfiguration:configuration];
     }
     return self;
@@ -37,13 +44,13 @@
 - (void)segmentsForVideoID:(NSString *)videoID
                 completion:(YTKACESponsorCompletion)completion {
     if (videoID.length == 0) {
-        completion(@[]);
+        if (completion) completion(@[]);
         return;
     }
 
     NSArray<NSString *> *categories = YTKACESponsorEnabledCategories();
     if (categories.count == 0) {
-        completion(@[]);
+        if (completion) completion(@[]);
         return;
     }
     NSString *cacheKey = [NSString stringWithFormat:@"%@|%@", videoID,
@@ -51,9 +58,21 @@
 
     NSArray *cached = [self.cache objectForKey:cacheKey];
     if (cached != nil) {
-        completion(cached);
+        if (completion) completion(cached);
         return;
     }
+
+    os_unfair_lock_lock(&_lock);
+    NSMutableArray<YTKACESponsorCompletion> *pending = self.inFlight[cacheKey];
+    if (pending != nil) {
+        if (completion) [pending addObject:[completion copy]];
+        os_unfair_lock_unlock(&_lock);
+        return;
+    }
+    pending = [NSMutableArray array];
+    if (completion) [pending addObject:[completion copy]];
+    self.inFlight[cacheKey] = pending;
+    os_unfair_lock_unlock(&_lock);
 
     NSURLComponents *components =
         [NSURLComponents componentsWithString:@"https://sponsor.ajay.app/api/skipSegments"];
@@ -67,7 +86,13 @@
     ];
     NSURL *url = components.URL;
     if (url == nil) {
-        completion(@[]);
+        os_unfair_lock_lock(&_lock);
+        NSArray *callbacks = [self.inFlight[cacheKey] copy];
+        [self.inFlight removeObjectForKey:cacheKey];
+        os_unfair_lock_unlock(&_lock);
+        for (YTKACESponsorCompletion block in callbacks) {
+            block(@[]);
+        }
         return;
     }
 
@@ -125,12 +150,23 @@
             ^NSComparisonResult(NSDictionary *left, NSDictionary *right) {
                 return [left[@"start"] compare:right[@"start"]];
             }];
-        if (result.count != 0) {
-            [weakSelf.cache setObject:result forKey:cacheKey];
+
+        __strong YTKACESponsorClient *strongSelf = weakSelf;
+        if (strongSelf) {
+            if (result.count != 0) {
+                [strongSelf.cache setObject:result forKey:cacheKey];
+            }
+            os_unfair_lock_lock(&strongSelf->_lock);
+            NSArray *callbacks = [strongSelf.inFlight[cacheKey] copy];
+            [strongSelf.inFlight removeObjectForKey:cacheKey];
+            os_unfair_lock_unlock(&strongSelf->_lock);
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                for (YTKACESponsorCompletion block in callbacks) {
+                    block(result);
+                }
+            });
         }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            completion(result);
-        });
     }];
     [task resume];
 }

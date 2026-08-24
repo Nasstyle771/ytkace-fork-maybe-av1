@@ -10,25 +10,43 @@
 
 static const void *YTKACETabSwitchKey = &YTKACETabSwitchKey;
 
+static NSMutableDictionary<NSString *, UIImage *> *s_cachedTabIcons = nil;
+
 static UIImage *YTKACETabEditorIcon(NSString *token, NSString *fallback) {
-    if ([token isEqualToString:@"shorts"]) {
-        return [YTKACEShortsImage(NO)
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    if (s_cachedTabIcons == nil) {
+        s_cachedTabIcons = [NSMutableDictionary dictionaryWithCapacity:16];
     }
-    NSDictionary *assets = @{
-        @"music": @"yt_outline_music_24pt_3x_Normal",
-        @"live": @"live_24pt_3x_Normal",
-        @"gaming": @"gaming_24pt_3x_Normal",
-        @"news": @"news_24pt_3x_Normal",
-        @"sports": @"G_sport",
-        @"learning": @"G_Learning",
-        @"fashion": @"fashion_24pt_3x_Normal",
-        @"playlists": @"playlist",
-        @"history": @"history",
-        @"notifications": @"ic_notifications_none_3x_Normal",
-        @"watchlater": @"clock_24pt_3x_Normal"
-    };
-    return YTKACEAssetImage(assets[token], fallback);
+    UIImage *cached = s_cachedTabIcons[token ?: @""];
+    if (cached != nil) return cached;
+
+    UIImage *image = nil;
+    if ([token isEqualToString:@"shorts"]) {
+        image = [YTKACEShortsImage(NO)
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    } else {
+        static NSDictionary *assets;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            assets = @{
+                @"music": @"yt_outline_music_24pt_3x_Normal",
+                @"live": @"live_24pt_3x_Normal",
+                @"gaming": @"gaming_24pt_3x_Normal",
+                @"news": @"news_24pt_3x_Normal",
+                @"sports": @"G_sport",
+                @"learning": @"G_Learning",
+                @"fashion": @"fashion_24pt_3x_Normal",
+                @"playlists": @"playlist",
+                @"history": @"history",
+                @"notifications": @"ic_notifications_none_3x_Normal",
+                @"watchlater": @"clock_24pt_3x_Normal"
+            };
+        });
+        image = YTKACEAssetImage(assets[token], fallback);
+    }
+    if (image != nil) {
+        s_cachedTabIcons[token ?: @""] = image;
+    }
+    return image;
 }
 
 @interface YTKACETabEditorController ()
@@ -168,8 +186,6 @@ willDisplayHeaderView:(UIView *)view
     cell.textLabel.text = nil;
     cell.detailTextLabel.text = nil;
     cell.imageView.image = nil;
-    cell.accessoryView = nil;
-    cell.editingAccessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.editingAccessoryType = UITableViewCellAccessoryNone;
     cell.textLabel.font = [UIFont systemFontOfSize:17.0];
@@ -187,26 +203,34 @@ willDisplayHeaderView:(UIView *)view
                           @"YTKACE.Preference.Shorts.PreventAutoOpen",
                           @"YTKACE.Preference.Tabs.FrostedHidden"];
         cell.textLabel.text = titles[(NSUInteger)indexPath.row];
-        UISwitch *toggle = [UISwitch new];
-        toggle.transform = CGAffineTransformMakeScale(0.95, 0.95);
+        UISwitch *toggle = (UISwitch *)cell.accessoryView;
+        if (toggle == nil || ![toggle isKindOfClass:UISwitch.class]) {
+            toggle = [UISwitch new];
+            toggle.transform = CGAffineTransformMakeScale(0.95, 0.95);
+            cell.accessoryView = toggle;
+            cell.editingAccessoryView = toggle;
+        }
         toggle.onTintColor = YTKACEAccentColor();
         NSString *key = keys[(NSUInteger)indexPath.row];
         toggle.on = [YTKACEPreferenceObject(key) boolValue];
         objc_setAssociatedObject(toggle, YTKACETabSwitchKey, key, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        [toggle removeTarget:nil action:NULL forControlEvents:UIControlEventValueChanged];
         [toggle addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
-        cell.accessoryView = toggle;
-        cell.editingAccessoryView = toggle;
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         return cell;
     }
 
     if (indexPath.section == 1) {
+        cell.accessoryView = nil;
+        cell.editingAccessoryView = nil;
         cell.textLabel.text = YTKACELocalized(@"Default Startup Tab");
         cell.detailTextLabel.text = YTKACEPickerSummary(@"YTKACE.Preference.Tabs.Startup", @[YTKACELocalized(@"Home"), YTKACELocalized(@"Explore"), YTKACELocalized(@"Subscriptions"), YTKACELocalized(@"Shorts"), YTKACELocalized(@"You")], @[@0, @1, @2, @3, @4], 0);
         cell.detailTextLabel.textColor = YTKACEAccentColor();
         return cell;
     }
 
+    cell.accessoryView = nil;
+    cell.editingAccessoryView = nil;
     NSDictionary *tab = indexPath.section == 2
         ? self.activeTabs[(NSUInteger)indexPath.row]
         : self.inactiveTabs[(NSUInteger)indexPath.row];
@@ -302,6 +326,7 @@ commitEditingStyle:(UITableViewCellEditingStyle)editingStyle
         [order addObject:tab[@"token"]];
     }
     [NSUserDefaults.standardUserDefaults setObject:order forKey:@"YTKACE.Preference.Tabs.Order"];
+    YTKACESyncDefaults();
     [NSNotificationCenter.defaultCenter postNotificationName:@"YTKACETabConfigDidChange" object:nil];
 }
 

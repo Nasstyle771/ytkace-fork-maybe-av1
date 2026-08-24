@@ -92,23 +92,28 @@ static BOOL YTKACEViewIsInsideWatchActionBar(UIView *view) {
 }
 
 static NSString *YTKACEActionPreference(id item) {
-    NSString *token = [[[NSString stringWithFormat:@"%@ %@",
-        NSStringFromClass([item class]), YTKACENormalizedDescription(item)] lowercaseString]
+    if (item == nil) return nil;
+    NSString *token = [[[NSString stringWithFormat:@"%s %@",
+        class_getName([item class]), YTKACENormalizedDescription(item)] lowercaseString]
         stringByReplacingOccurrencesOfString:@"." withString:@"_"];
-    NSArray<NSArray<NSString *> *> *rules = @[
-        @[@"YTKACE.Preference.ActionBar.DislikeHidden", @"dislike"],
-        @[@"YTKACE.Preference.ActionBar.ShareHidden", @"share"],
-        @[@"YTKACE.Preference.ActionBar.DownloadHidden", @"offline", @"download"],
-        @[@"YTKACE.Preference.ActionBar.SaveHidden", @"save", @"add_to"],
-        @[@"YTKACE.Preference.ActionBar.ClipHidden", @"clip"],
-        @[@"YTKACE.Preference.ActionBar.RemixHidden", @"remix"],
-        @[@"YTKACE.Preference.ActionBar.ThanksHidden", @"thanks"],
-        @[@"YTKACE.Preference.ActionBar.HypeHidden", @"hype"],
-        @[@"YTKACE.Preference.ActionBar.ReportHidden", @"id_player_watch_flag_button", @"report"],
-        @[@"YTKACE.Preference.ActionBar.AskHidden", @"ask", @"gemini"],
-        @[@"YTKACE.Preference.ActionBar.LikeHidden", @"like"]
-    ];
-    for (NSArray<NSString *> *rule in rules) {
+    static NSArray<NSArray<NSString *> *> *s_actionRules = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_actionRules = @[
+            @[@"YTKACE.Preference.ActionBar.DislikeHidden", @"dislike"],
+            @[@"YTKACE.Preference.ActionBar.ShareHidden", @"share"],
+            @[@"YTKACE.Preference.ActionBar.DownloadHidden", @"offline", @"download"],
+            @[@"YTKACE.Preference.ActionBar.SaveHidden", @"save", @"add_to"],
+            @[@"YTKACE.Preference.ActionBar.ClipHidden", @"clip"],
+            @[@"YTKACE.Preference.ActionBar.RemixHidden", @"remix"],
+            @[@"YTKACE.Preference.ActionBar.ThanksHidden", @"thanks"],
+            @[@"YTKACE.Preference.ActionBar.HypeHidden", @"hype"],
+            @[@"YTKACE.Preference.ActionBar.ReportHidden", @"id_player_watch_flag_button", @"report"],
+            @[@"YTKACE.Preference.ActionBar.AskHidden", @"ask", @"gemini"],
+            @[@"YTKACE.Preference.ActionBar.LikeHidden", @"like"]
+        ];
+    });
+    for (NSArray<NSString *> *rule in s_actionRules) {
         for (NSUInteger index = 1; index < rule.count; index++) {
             if ([token containsString:rule[index]]) return rule.firstObject;
         }
@@ -148,28 +153,32 @@ static NSString *YTKACEActionPreferenceForView(UIView *view) {
             return preference;
         }
     }
-    NSString *token = [[[NSString stringWithFormat:@"%@ %@",
-        NSStringFromClass(view.class), view.accessibilityIdentifier ?: @""]
+    NSString *token = [[[NSString stringWithFormat:@"%s %@",
+        class_getName(view.class), view.accessibilityIdentifier ?: @""]
         lowercaseString]
         stringByReplacingOccurrencesOfString:@"." withString:@"_"];
     NSString *wide = [[NSString stringWithFormat:@"%@ %@", token,
         view.accessibilityLabel ?: @""] lowercaseString];
-    NSArray<NSArray<NSString *> *> *rules = @[
-        @[@"YTKACE.Preference.ActionBar.DislikeHidden", @"id_video_dislike_button", @"dislike"],
-        @[@"YTKACE.Preference.ActionBar.ShareHidden", @"id_video_share_button", @"share"],
-        @[@"YTKACE.Preference.ActionBar.DownloadHidden", @"offline", @"download"],
-        @[@"YTKACE.Preference.ActionBar.SaveHidden", @"save", @"add_to"],
-        @[@"YTKACE.Preference.ActionBar.ClipHidden", @"clip"],
-        @[@"YTKACE.Preference.ActionBar.RemixHidden", @"remix"],
-        @[@"YTKACE.Preference.ActionBar.ThanksHidden", @"thanks"],
-        @[@"YTKACE.Preference.ActionBar.HypeHidden", @"hype"],
-        @[@"YTKACE.Preference.ActionBar.ReportHidden", @"id_player_watch_flag_button", @"report"],
-        @[@"YTKACE.Preference.ActionBar.AskHidden", @"ask", @"gemini"],
-        @[@"YTKACE.Preference.ActionBar.LikeHidden", @"id_video_like_button", @"like"]
-    ];
+    static NSArray<NSArray<NSString *> *> *s_viewRules = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_viewRules = @[
+            @[@"YTKACE.Preference.ActionBar.DislikeHidden", @"id_video_dislike_button", @"dislike"],
+            @[@"YTKACE.Preference.ActionBar.ShareHidden", @"id_video_share_button", @"share"],
+            @[@"YTKACE.Preference.ActionBar.DownloadHidden", @"offline", @"download"],
+            @[@"YTKACE.Preference.ActionBar.SaveHidden", @"save", @"add_to"],
+            @[@"YTKACE.Preference.ActionBar.ClipHidden", @"clip"],
+            @[@"YTKACE.Preference.ActionBar.RemixHidden", @"remix"],
+            @[@"YTKACE.Preference.ActionBar.ThanksHidden", @"thanks"],
+            @[@"YTKACE.Preference.ActionBar.HypeHidden", @"hype"],
+            @[@"YTKACE.Preference.ActionBar.ReportHidden", @"id_player_watch_flag_button", @"report"],
+            @[@"YTKACE.Preference.ActionBar.AskHidden", @"ask", @"gemini"],
+            @[@"YTKACE.Preference.ActionBar.LikeHidden", @"id_video_like_button", @"like"]
+        ];
+    });
     BOOL dislikeToken = [token containsString:@"dislike"] ||
         [wide containsString:@"dislike"];
-    for (NSArray<NSString *> *rule in rules) {
+    for (NSArray<NSString *> *rule in s_viewRules) {
         if (dislikeToken &&
             [rule.firstObject isEqualToString:
                 @"YTKACE.Preference.ActionBar.LikeHidden"]) {
@@ -181,7 +190,7 @@ static NSString *YTKACEActionPreferenceForView(UIView *view) {
             }
         }
     }
-    for (NSArray<NSString *> *rule in rules) {
+    for (NSArray<NSString *> *rule in s_viewRules) {
         if (dislikeToken &&
             [rule.firstObject isEqualToString:
                 @"YTKACE.Preference.ActionBar.LikeHidden"]) {
@@ -189,28 +198,6 @@ static NSString *YTKACEActionPreferenceForView(UIView *view) {
         }
         for (NSUInteger index = 1; index < rule.count; index++) {
             if ([wide containsString:rule[index]]) {
-                NSMutableArray<NSString *> *shape = [NSMutableArray array];
-                NSMutableArray<UIView *> *pending =
-                    [NSMutableArray arrayWithObject:view];
-                NSUInteger seen = 0;
-                while (pending.count != 0 && seen < 40) {
-                    UIView *node = pending.firstObject;
-                    [pending removeObjectAtIndex:0];
-                    seen++;
-                    NSMutableString *entry = [NSMutableString stringWithString:
-                        NSStringFromClass([node class])];
-                    if (node.accessibilityIdentifier.length != 0) {
-                        [entry appendFormat:@"#%@", node.accessibilityIdentifier];
-                    }
-                    for (NSString *probe in @[@"iconType", @"icon", @"image",
-                                              @"renderer", @"entry", @"model"]) {
-                        SEL selector = NSSelectorFromString(probe);
-                        if (![node respondsToSelector:selector]) continue;
-                        [entry appendFormat:@" %@?", probe];
-                    }
-                    [shape addObject:entry];
-                    [pending addObjectsFromArray:node.subviews];
-                }
                 return rule.firstObject;
             }
         }
@@ -1095,12 +1082,17 @@ static BOOL YTKACESectionIsShortsShelf(id section) {
 }
 
 static NSArray<NSString *> *YTKACEProductsMarkers(void) {
-    return @[
-        @"merchandise_shelf", @"merchandise_item",
-        @"product_shelf", @"products_shelf", @"shopping_shelf",
-        @"promoted_sparkles_text_product_watch",
-        @"product_in_video", @"products_in_video"
-    ];
+    static NSArray<NSString *> *s_markers = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_markers = @[
+            @"merchandise_shelf", @"merchandise_item",
+            @"product_shelf", @"products_shelf", @"shopping_shelf",
+            @"promoted_sparkles_text_product_watch",
+            @"product_in_video", @"products_in_video"
+        ];
+    });
+    return s_markers;
 }
 
 static BOOL YTKACESectionIsProductsShelf(id section) {

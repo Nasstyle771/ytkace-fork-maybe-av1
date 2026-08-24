@@ -39,10 +39,11 @@ static UIViewController *YTKACEAvatarPresenter(UIView *view) {
 static BOOL YTKACEAvatarToken(UIView *view) {
     UIView *candidate = view;
     for (NSUInteger depth = 0; candidate != nil && depth < 7; depth++) {
-        NSString *token = [NSString stringWithFormat:@"%@ %@ %@",
-            NSStringFromClass(candidate.class) ?: @"",
-            candidate.accessibilityIdentifier ?: @"",
-            candidate.accessibilityLabel ?: @""].lowercaseString;
+        NSString *ident = candidate.accessibilityIdentifier ?: @"";
+        NSString *label = candidate.accessibilityLabel ?: @"";
+        const char *clsName = class_getName(candidate.class);
+        NSString *token = [NSString stringWithFormat:@"%s %@ %@",
+            clsName, ident, label].lowercaseString;
         if ([token containsString:@"ytkace"]) return NO;
         if ([token containsString:@"avatar"] ||
             [token containsString:@"profile"] ||

@@ -497,28 +497,21 @@ static void YTKACEInstallMaximumRateHook(NSString *className,
 
 static void YTKACEInstallMaximumRateHooks(void) {
     YTKACEMaximumRateOriginals = [NSMutableDictionary dictionary];
-    int count = objc_getClassList(NULL, 0);
-    if (count <= 0) {
-        return;
-    }
-    Class *classes = (__unsafe_unretained Class *)calloc((size_t)count,
-                                                          sizeof(Class));
-    count = objc_getClassList(classes, count);
-    for (int index = 0; index < count; index++) {
-        NSString *name = NSStringFromClass(classes[index]);
-        BOOL candidate = [name containsString:@"GranularVariableSpeedConfig"] ||
-            [name containsString:@"PlayerHotConfig"];
-        if (!candidate) {
-            continue;
-        }
+    NSArray<NSString *> *targetClasses = @[
+        @"YTIPlayerHotConfig",
+        @"HAMPlayerConfiguration",
+        @"YTIMediaPlayerHotConfig",
+        @"YTIGranularVariableSpeedConfig",
+        @"YTVariableSpeedConfig",
+        @"YTPlaybackConfig",
+        @"MLHAMPlayerItem",
+        @"MLPlayerPool"
+    ];
+    for (NSString *name in targetClasses) {
         for (NSString *selector in @[@"maximumPlaybackRate", @"maxPlaybackRate"]) {
-            if (class_getInstanceMethod(classes[index],
-                                        NSSelectorFromString(selector)) != NULL) {
-                YTKACEInstallMaximumRateHook(name, selector);
-            }
+            YTKACEInstallMaximumRateHook(name, selector);
         }
     }
-    free(classes);
 }
 
 void YTKACEInstallSpeedHooks(void) {

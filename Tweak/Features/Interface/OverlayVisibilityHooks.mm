@@ -25,10 +25,15 @@ static BOOL YTKACEOverlayPreference(NSString *key) {
 }
 
 static NSString *YTKACEOverlayToken(UIView *view) {
-    return [[NSString stringWithFormat:@"%@ %@ %@",
-             NSStringFromClass(view.class),
-             view.accessibilityIdentifier ?: @"",
-             view.accessibilityLabel ?: @""] lowercaseString];
+    NSString *ident = view.accessibilityIdentifier ?: @"";
+    NSString *label = view.accessibilityLabel ?: @"";
+    if (ident.length == 0 && label.length == 0) {
+        return NSStringFromClass(view.class).lowercaseString;
+    }
+    return [[NSString stringWithFormat:@"%s %@ %@",
+             class_getName(view.class),
+             ident,
+             label] lowercaseString];
 }
 
 static BOOL YTKACEOverlayTokenMatches(NSString *token,
@@ -42,13 +47,18 @@ static BOOL YTKACEOverlayTokenMatches(NSString *token,
 }
 
 static NSArray<NSString *> *YTKACEPreviousNextTokens(void) {
-    return @[
-        @"id.player.previous.button", @"id.player.next.button",
-        @"previous.button", @"next.button",
-        @"previousbutton", @"nextbutton", @"previous_button", @"next_button",
-        @"previous button", @"next button", @"skipprevious", @"skipnext",
-        @"replaynextbutton", @"replay_next_button"
-    ];
+    static NSArray<NSString *> *s_tokens = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_tokens = @[
+            @"id.player.previous.button", @"id.player.next.button",
+            @"previous.button", @"next.button",
+            @"previousbutton", @"nextbutton", @"previous_button", @"next_button",
+            @"previous button", @"next button", @"skipprevious", @"skipnext",
+            @"replaynextbutton", @"replay_next_button"
+        ];
+    });
+    return s_tokens;
 }
 
 static void YTKACESetPreviousNextContainerEnabled(UIView *view, BOOL enabled) {
@@ -341,28 +351,32 @@ static void YTKACEApplyOverlayTree(UIView *view) {
 }
 
 static void YTKACEApplyOverlaySelectors(id overlay) {
-    NSDictionary<NSString *, NSString *> *selectors = @{
-        @"autoplaySwitch": @"YTKACE.Preference.Overlay.AutoplayHidden",
-        @"autoplayButton": @"YTKACE.Preference.Overlay.AutoplayHidden",
-        @"captionsButton": @"YTKACE.Preference.Overlay.CaptionsButtonHidden",
-        @"closedCaptionsButton": @"YTKACE.Preference.Overlay.CaptionsButtonHidden",
-        @"castButton": @"YTKACE.Preference.Overlay.CastHidden",
-        @"playbackRouteButton": @"YTKACE.Preference.Overlay.CastHidden",
-        @"closedCaptionsOrSubtitlesButton": @"YTKACE.Preference.Overlay.CaptionsButtonHidden",
-        @"infoCardButton": @"YTKACE.Preference.Overlay.InfoCardsHidden",
-        @"watermarkView": @"YTKACE.Preference.Overlay.WatermarkHidden",
-        @"endscreenView": @"YTKACE.Preference.Overlay.EndScreenHidden",
-        @"playPauseButton": @"YTKACE.Preference.Overlay.PlayPauseHidden",
-        @"previousButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
-        @"nextButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
-        @"previousButtonView": @"YTKACE.Preference.Overlay.PreviousNextHidden",
-        @"nextButtonView": @"YTKACE.Preference.Overlay.PreviousNextHidden",
-        @"minimizedPanelPreviousButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
-        @"minimizedPanelNextButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
-        @"replayNextButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
-        @"overflowButton": @"YTKACE.Preference.Overlay.MoreButtonHidden",
-        @"settingsButton": @"YTKACE.Preference.Overlay.MoreButtonHidden"
-    };
+    static NSDictionary<NSString *, NSString *> *selectors = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        selectors = @{
+            @"autoplaySwitch": @"YTKACE.Preference.Overlay.AutoplayHidden",
+            @"autoplayButton": @"YTKACE.Preference.Overlay.AutoplayHidden",
+            @"captionsButton": @"YTKACE.Preference.Overlay.CaptionsButtonHidden",
+            @"closedCaptionsButton": @"YTKACE.Preference.Overlay.CaptionsButtonHidden",
+            @"castButton": @"YTKACE.Preference.Overlay.CastHidden",
+            @"playbackRouteButton": @"YTKACE.Preference.Overlay.CastHidden",
+            @"closedCaptionsOrSubtitlesButton": @"YTKACE.Preference.Overlay.CaptionsButtonHidden",
+            @"infoCardButton": @"YTKACE.Preference.Overlay.InfoCardsHidden",
+            @"watermarkView": @"YTKACE.Preference.Overlay.WatermarkHidden",
+            @"endscreenView": @"YTKACE.Preference.Overlay.EndScreenHidden",
+            @"playPauseButton": @"YTKACE.Preference.Overlay.PlayPauseHidden",
+            @"previousButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
+            @"nextButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
+            @"previousButtonView": @"YTKACE.Preference.Overlay.PreviousNextHidden",
+            @"nextButtonView": @"YTKACE.Preference.Overlay.PreviousNextHidden",
+            @"minimizedPanelPreviousButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
+            @"minimizedPanelNextButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
+            @"replayNextButton": @"YTKACE.Preference.Overlay.PreviousNextHidden",
+            @"overflowButton": @"YTKACE.Preference.Overlay.MoreButtonHidden",
+            @"settingsButton": @"YTKACE.Preference.Overlay.MoreButtonHidden"
+        };
+    });
     for (NSString *name in selectors) {
         SEL selector = NSSelectorFromString(name);
         if (![overlay respondsToSelector:selector]) {

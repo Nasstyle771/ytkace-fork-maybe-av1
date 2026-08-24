@@ -1,6 +1,41 @@
 #import "SponsorPreferences.h"
 #import "../../Runtime/Preferences.h"
 #import "../../Runtime/Localization.h"
+#import <os/lock.h>
+
+static os_unfair_lock sSponsorPrefLock = OS_UNFAIR_LOCK_INIT;
+static NSMutableDictionary<NSString *, NSNumber *> *sBehaviorCache = nil;
+static NSMutableDictionary<NSString *, UIColor *> *sColorCache = nil;
+static NSArray<NSString *> *sEnabledCategoriesCache = nil;
+static NSInteger sNotificationModeCache = -1;
+static NSTimeInterval sSkipAlertDurationCache = -1.0;
+static NSTimeInterval sUnskipAlertDurationCache = -1.0;
+
+static void YTKACESponsorFlushPreferenceCaches(void) {
+    os_unfair_lock_lock(&sSponsorPrefLock);
+    [sBehaviorCache removeAllObjects];
+    [sColorCache removeAllObjects];
+    sEnabledCategoriesCache = nil;
+    sNotificationModeCache = -1;
+    sSkipAlertDurationCache = -1.0;
+    sUnskipAlertDurationCache = -1.0;
+    os_unfair_lock_unlock(&sSponsorPrefLock);
+}
+
+static void YTKACESponsorEnsurePrefObserver(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sBehaviorCache = [NSMutableDictionary dictionary];
+        sColorCache = [NSMutableDictionary dictionary];
+        [NSNotificationCenter.defaultCenter
+            addObserverForName:YTKACEPreferencesDidChangeNotification
+                        object:nil
+                         queue:nil
+                    usingBlock:^(__unused NSNotification *note) {
+            YTKACESponsorFlushPreferenceCaches();
+        }];
+    });
+}
 
 NSArray<NSDictionary<NSString *, NSString *> *> *YTKACESponsorCategoryDefinitions(void) {
     static NSArray *definitions;
@@ -39,19 +74,39 @@ static NSDictionary<NSString *, NSString *> *YTKACESponsorDefinition(NSString *c
 }
 
 NSInteger YTKACESponsorCategoryBehavior(NSString *category) {
-    id stored = YTKACEPreferenceObject(YTKACESponsorBehaviorKey(category));
-    if ([stored respondsToSelector:@selector(integerValue)]) {
-        return MAX(0, MIN([stored integerValue], 3));
+    if (category.length == 0) return 2;
+    YTKACESponsorEnsurePrefObserver();
+    
+    os_unfair_lock_lock(&sSponsorPrefLock);
+    NSNumber *cached = sBehaviorCache[category];
+    os_unfair_lock_unlock(&sSponsorPrefLock);
+    if (cached != nil) {
+        return cached.integerValue;
     }
-    if ([category isEqualToString:@"sponsor"]) {
+
+    id stored = YTKACEPreferenceObject(YTKACESponsorBehaviorKey(category));
+    NSInteger result = 2;
+    if ([stored respondsToSelector:@selector(integerValue)]) {
+        result = MAX(0, MIN([stored integerValue], 3));
+    } else if ([category isEqualToString:@"sponsor"]) {
         id legacy = YTKACEPreferenceObject(@"YTKACE.Preference.SponsorBlock.Mode");
-        return [legacy respondsToSelector:@selector(integerValue)] &&
+        result = [legacy respondsToSelector:@selector(integerValue)] &&
             [legacy integerValue] == 1 ? 1 : 0;
     }
-    return 2;
+
+    os_unfair_lock_lock(&sSponsorPrefLock);
+    sBehaviorCache[category] = @(result);
+    os_unfair_lock_unlock(&sSponsorPrefLock);
+    return result;
 }
 
 NSArray<NSString *> *YTKACESponsorEnabledCategories(void) {
+    YTKACESponsorEnsurePrefObserver();
+    os_unfair_lock_lock(&sSponsorPrefLock);
+    NSArray *cached = sEnabledCategoriesCache;
+    os_unfair_lock_unlock(&sSponsorPrefLock);
+    if (cached != nil) return cached;
+
     NSMutableArray *categories = [NSMutableArray array];
     for (NSDictionary *definition in YTKACESponsorCategoryDefinitions()) {
         NSString *category = definition[@"id"];
@@ -59,7 +114,11 @@ NSArray<NSString *> *YTKACESponsorEnabledCategories(void) {
             [categories addObject:category];
         }
     }
-    return categories;
+    NSArray *result = [categories copy];
+    os_unfair_lock_lock(&sSponsorPrefLock);
+    sEnabledCategoriesCache = result;
+    os_unfair_lock_unlock(&sSponsorPrefLock);
+    return result;
 }
 
 static UIColor *YTKACEColorFromHex(NSString *hex) {
@@ -75,17 +134,34 @@ static UIColor *YTKACEColorFromHex(NSString *hex) {
 }
 
 UIColor *YTKACESponsorCategoryColor(NSString *category) {
+    if (category.length == 0) return UIColor.systemGreenColor;
+    YTKACESponsorEnsurePrefObserver();
+
+    os_unfair_lock_lock(&sSponsorPrefLock);
+    UIColor *cached = sColorCache[category];
+    os_unfair_lock_unlock(&sSponsorPrefLock);
+    if (cached != nil) return cached;
+
     NSDictionary *definition = YTKACESponsorDefinition(category);
     NSString *stored = YTKACEPreferenceObject(YTKACESponsorColorKey(category));
     NSString *hex = [stored isKindOfClass:NSString.class] && stored.length != 0
         ? stored : definition[@"color"];
-    return YTKACEColorFromHex(hex);
+    UIColor *color = YTKACEColorFromHex(hex);
+
+    os_unfair_lock_lock(&sSponsorPrefLock);
+    if (color != nil) sColorCache[category] = color;
+    os_unfair_lock_unlock(&sSponsorPrefLock);
+    return color ?: UIColor.systemGreenColor;
 }
 
 NSInteger YTKACESponsorNotificationMode(void) {
+    YTKACESponsorEnsurePrefObserver();
+    if (sNotificationModeCache >= 0) return sNotificationModeCache;
     id stored = YTKACEPreferenceObject(@"YTKACE.Preference.SponsorBlock.NotificationMode");
-    return [stored respondsToSelector:@selector(integerValue)]
+    NSInteger mode = [stored respondsToSelector:@selector(integerValue)]
         ? MAX(0, MIN([stored integerValue], 2)) : 0;
+    sNotificationModeCache = mode;
+    return mode;
 }
 
 static NSTimeInterval YTKACESponsorDuration(NSString *key) {
@@ -96,9 +172,13 @@ static NSTimeInterval YTKACESponsorDuration(NSString *key) {
 }
 
 NSTimeInterval YTKACESponsorSkipAlertDuration(void) {
-    return YTKACESponsorDuration(@"YTKACE.Preference.SponsorBlock.SkipAlertSeconds");
+    if (sSkipAlertDurationCache >= 0.0) return sSkipAlertDurationCache;
+    sSkipAlertDurationCache = YTKACESponsorDuration(@"YTKACE.Preference.SponsorBlock.SkipAlertSeconds");
+    return sSkipAlertDurationCache;
 }
 
 NSTimeInterval YTKACESponsorUnskipAlertDuration(void) {
-    return YTKACESponsorDuration(@"YTKACE.Preference.SponsorBlock.UnskipAlertSeconds");
+    if (sUnskipAlertDurationCache >= 0.0) return sUnskipAlertDurationCache;
+    sUnskipAlertDurationCache = YTKACESponsorDuration(@"YTKACE.Preference.SponsorBlock.UnskipAlertSeconds");
+    return sUnskipAlertDurationCache;
 }

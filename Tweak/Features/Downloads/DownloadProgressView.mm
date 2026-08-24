@@ -266,7 +266,7 @@
          progress:(double)progress
   downloadedBytes:(int64_t)downloadedBytes
        totalBytes:(int64_t)totalBytes {
-    dispatch_async(dispatch_get_main_queue(), ^{
+    void (^updateBlock)(void) = ^{
         YTKACEDownloadProgressItem *item = self.items[identifier];
         if (item == nil) return;
         BOOL sameStage = [item.stage isEqualToString:stage];
@@ -278,7 +278,12 @@
         item.downloadedBytes = sameStage ? MAX(item.downloadedBytes, nextBytes) : nextBytes;
         item.totalBytes = MAX(totalBytes, 0);
         if ([self.visibleIdentifier isEqualToString:identifier]) [self renderItem:item];
-    });
+    };
+    if (NSThread.isMainThread) {
+        updateBlock();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), updateBlock);
+    }
 }
 
 - (void)finishJob:(NSString *)identifier

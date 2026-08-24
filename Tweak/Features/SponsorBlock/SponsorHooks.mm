@@ -13,6 +13,8 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <math.h>
+#import <vector>
+#import <os/lock.h>
 
 static IMP OriginalDidActivateVideo;
 static IMP OriginalSingleVideoTimeChanged;
@@ -20,9 +22,17 @@ static IMP OriginalMutatedVideoTimeChanged;
 static IMP OriginalPlayerBarLayout;
 static IMP OriginalMiniplayerBarLayout;
 
+struct YTKACESponsorFastSegment {
+    double start;
+    double end;
+    NSString *category;
+    NSInteger behavior;
+    bool skipped;
+};
+
 static const void *YTKACESponsorSegmentsAssociation = &YTKACESponsorSegmentsAssociation;
+static const void *YTKACESponsorFastSegmentsAssociation = &YTKACESponsorFastSegmentsAssociation;
 static const void *YTKACESponsorVideoAssociation = &YTKACESponsorVideoAssociation;
-static const void *YTKACESponsorSkippedAssociation = &YTKACESponsorSkippedAssociation;
 static const void *YTKACESponsorMarkerAssociation = &YTKACESponsorMarkerAssociation;
 static const void *YTKACESponsorRenderedSegmentsAssociation = &YTKACESponsorRenderedSegmentsAssociation;
 static const void *YTKACESponsorMarkerBoundsAssociation = &YTKACESponsorMarkerBoundsAssociation;
@@ -32,6 +42,14 @@ static NSHashTable<UIView *> *YTKACESponsorBars;
 static BOOL YTKACESponsorTimeUpdatesEnabled;
 static BOOL YTKACEPlaybackTimeNotificationsNeeded;
 static id YTKACEPlaybackPreferenceObserver;
+static os_unfair_lock YTKACESponsorVectorLock = OS_UNFAIR_LOCK_INIT;
+
+@interface YTKACEFastSegmentContainer : NSObject
+@property(nonatomic, assign) std::vector<YTKACESponsorFastSegment> segments;
+@end
+
+@implementation YTKACEFastSegmentContainer
+@end
 
 static void YTKACERefreshPlaybackTimePreferenceState(void) {
     YTKACESponsorTimeUpdatesEnabled =
@@ -313,45 +331,66 @@ static void YTKACEAskToSkipSponsor(id controller, double start, double end,
     });
 }
 
+// O(log N) binary search for the segment covering given time
+static NSInteger YTKACEFindSegmentIndex(const std::vector<YTKACESponsorFastSegment> &segments, double time) {
+    if (segments.empty()) return -1;
+    NSInteger low = 0;
+    NSInteger high = (NSInteger)segments.size() - 1;
+    NSInteger best = -1;
+    while (low <= high) {
+        NSInteger mid = low + (high - low) / 2;
+        if (segments[mid].start <= time) {
+            best = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+    return best;
+}
+
 static void YTKACEEvaluateSponsorTime(id controller, double time) {
-    if (!YTKACESponsorBlockEnabled()) {
+    if (!YTKACESponsorBlockEnabled() || time < 0.0) {
         return;
     }
 
-    NSArray<NSDictionary<NSString *, id> *> *segments =
-        objc_getAssociatedObject(controller, YTKACESponsorSegmentsAssociation);
-    NSMutableSet<NSNumber *> *skipped =
-        objc_getAssociatedObject(controller, YTKACESponsorSkippedAssociation);
-    if (skipped == nil) {
-        skipped = [NSMutableSet set];
-        objc_setAssociatedObject(controller,
-                                 YTKACESponsorSkippedAssociation,
-                                 skipped,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    YTKACEFastSegmentContainer *container =
+        objc_getAssociatedObject(controller, YTKACESponsorFastSegmentsAssociation);
+    if (container == nil || container.segments.empty()) {
+        return;
     }
 
-    [segments enumerateObjectsUsingBlock:
-        ^(NSDictionary<NSString *, id> *segment, NSUInteger index, BOOL *stop) {
-            double start = [segment[@"start"] doubleValue];
-            double end = [segment[@"end"] doubleValue];
-            NSString *category = [segment[@"category"] isKindOfClass:NSString.class]
-                ? segment[@"category"] : @"sponsor";
-            NSInteger behavior = YTKACESponsorCategoryBehavior(category);
-            if (behavior == 2 || behavior == 3) return;
-            NSNumber *token = @(index);
-            if (time < start - 1.0) {
-                [skipped removeObject:token];
+    os_unfair_lock_lock(&YTKACESponsorVectorLock);
+    auto &segments = container.segments;
+    size_t count = segments.size();
+
+    // Reset skipped status on backward scrub
+    for (size_t i = 0; i < count; i++) {
+        if (segments[i].skipped && (time < segments[i].start - 1.0 || time > segments[i].end + 2.0)) {
+            segments[i].skipped = false;
+        }
+    }
+
+    NSInteger matchIndex = YTKACEFindSegmentIndex(segments, time);
+    if (matchIndex >= 0 && matchIndex < (NSInteger)count) {
+        auto &seg = segments[matchIndex];
+        if (time >= seg.start && time < seg.end - 0.05 && !seg.skipped) {
+            seg.skipped = true;
+            double start = seg.start;
+            double end = seg.end;
+            NSString *category = seg.category;
+            NSInteger behavior = seg.behavior;
+            os_unfair_lock_unlock(&YTKACESponsorVectorLock);
+
+            if (behavior == 1) {
+                YTKACEAskToSkipSponsor(controller, start, end, category);
+            } else if (behavior == 0) {
+                YTKACEPerformSponsorSkip(controller, start, end, category);
             }
-            if (time >= start && time < end - 0.25 && ![skipped containsObject:token]) {
-                [skipped addObject:token];
-                if (behavior == 1) {
-                    YTKACEAskToSkipSponsor(controller, start, end, category);
-                } else {
-                    YTKACEPerformSponsorSkip(controller, start, end, category);
-                }
-                *stop = YES;
-            }
-        }];
+            return;
+        }
+    }
+    os_unfair_lock_unlock(&YTKACESponsorVectorLock);
 }
 
 static void YTKACEDidActivateVideo(id receiver,
@@ -368,6 +407,10 @@ static void YTKACEDidActivateVideo(id receiver,
     if (!YTKACESponsorBlockEnabled()) {
         objc_setAssociatedObject(receiver,
                                  YTKACESponsorSegmentsAssociation,
+                                 nil,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(receiver,
+                                 YTKACESponsorFastSegmentsAssociation,
                                  nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
@@ -390,14 +433,14 @@ static void YTKACEDidActivateVideo(id receiver,
                              @[],
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(receiver,
-                             YTKACESponsorSkippedAssociation,
-                             [NSMutableSet set],
+                             YTKACESponsorFastSegmentsAssociation,
+                             [YTKACEFastSegmentContainer new],
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     YTKACECurrentSponsorController = receiver;
 
     __weak id weakReceiver = receiver;
     [YTKACESponsorClient.sharedClient segmentsForVideoID:videoID
-                                             completion:^(NSArray *segments) {
+                                              completion:^(NSArray *segments) {
         id strongReceiver = weakReceiver;
         NSString *current =
             objc_getAssociatedObject(strongReceiver, YTKACESponsorVideoAssociation);
@@ -408,6 +451,25 @@ static void YTKACEDidActivateVideo(id receiver,
                                  YTKACESponsorSegmentsAssociation,
                                  segments,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+        // Pre-build fast C++ segments sorted by start time
+        YTKACEFastSegmentContainer *container = [YTKACEFastSegmentContainer new];
+        container.segments.reserve(segments.count);
+        for (NSDictionary<NSString *, id> *dict in segments) {
+            double start = [dict[@"start"] doubleValue];
+            double end = [dict[@"end"] doubleValue];
+            NSString *category = [dict[@"category"] isKindOfClass:NSString.class]
+                ? dict[@"category"] : @"sponsor";
+            NSInteger behavior = YTKACESponsorCategoryBehavior(category);
+            if (behavior != 2 && behavior != 3 && isfinite(start) && isfinite(end) && end > start) {
+                container.segments.push_back({start, end, category, behavior, false});
+            }
+        }
+        objc_setAssociatedObject(strongReceiver,
+                                 YTKACESponsorFastSegmentsAssociation,
+                                 container,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
         for (UIView *bar in YTKACESponsorBars.allObjects) {
             [bar setNeedsLayout];
             [bar layoutIfNeeded];
@@ -565,13 +627,13 @@ static void YTKACERenderSponsorMarkers(UIView *receiver, UIView *target,
     if (!rebuild && !reattached && CGRectEqualToRect(previousBounds, signature) &&
         fabs(previousDuration - duration) < 0.001) return;
     objc_setAssociatedObject(receiver,
-                             YTKACESponsorMarkerBoundsAssociation,
-                             [NSValue valueWithCGRect:signature],
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                              YTKACESponsorMarkerBoundsAssociation,
+                              [NSValue valueWithCGRect:signature],
+                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(receiver,
-                             YTKACESponsorMarkerDurationAssociation,
-                             @(duration),
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                              YTKACESponsorMarkerDurationAssociation,
+                              @(duration),
+                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];

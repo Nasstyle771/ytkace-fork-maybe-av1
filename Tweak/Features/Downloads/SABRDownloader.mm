@@ -99,12 +99,10 @@ void YTKACESABRSetNativeRequest(NSURLRequest *request) {
             YTKACESABRHeadersByConfig[config] = [request.allHTTPHeaderFields copy];
         }
     }
-    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"ytkace-native.pb"];
-    [request.HTTPBody writeToFile:path atomically:YES];
-    YTKACEDownloadLog(@"native", @"body video=%@ bytes=%lu fields=%@ dump=%@",
+    YTKACEDownloadLog(@"native", @"body video=%@ bytes=%lu fields=%@",
         YTKACESABRCurrentVideoID ?: @"unknown",
         (unsigned long)request.HTTPBody.length,
-        YTKACEPBFieldSummary(request.HTTPBody), path);
+        YTKACEPBFieldSummary(request.HTTPBody));
 }
 
 static NSData *YTKACESABRCurrentNativeBody(NSString *videoID, NSData *config) {
@@ -762,11 +760,9 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     [self clearRound:self.video];
     [self clearRound:self.audio];
     if (self.requestNumber == 0) {
-        NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"ytkace-outgoing.pb"];
-        [request writeToFile:path atomically:YES];
-        YTKACEDownloadLog(self.identifier, @"request fields native=%lu outgoing=%lu summary=%@ dump=%@",
+        YTKACEDownloadLog(self.identifier, @"request fields native=%lu outgoing=%lu summary=%@",
             (unsigned long)nativeBody.length, (unsigned long)request.length,
-            YTKACEPBFieldSummary(request), path);
+            YTKACEPBFieldSummary(request));
     }
     return request;
 }
@@ -853,19 +849,20 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     }
 
     NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
-    configuration.timeoutIntervalForRequest = 25.0;
+    configuration.timeoutIntervalForRequest = 30.0;
     configuration.timeoutIntervalForResource = 3600.0;
     configuration.waitsForConnectivity = YES;
     configuration.allowsCellularAccess = YES;
     configuration.allowsExpensiveNetworkAccess = YES;
     configuration.allowsConstrainedNetworkAccess = YES;
     configuration.networkServiceType = NSURLNetworkServiceTypeDefault;
-    configuration.HTTPMaximumConnectionsPerHost = 8;
+    configuration.HTTPMaximumConnectionsPerHost = 12;
     configuration.HTTPShouldUsePipelining = YES;
     configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    configuration.URLCache = nil;
     configuration.shouldUseExtendedBackgroundIdleMode = YES;
     NSOperationQueue *queue = [NSOperationQueue new];
-    queue.maxConcurrentOperationCount = 4;
+    queue.maxConcurrentOperationCount = 6;
     queue.qualityOfService = NSQualityOfServiceUserInteractive;
     self.session = [NSURLSession sessionWithConfiguration:configuration
         delegate:self delegateQueue:queue];
@@ -1182,12 +1179,16 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
     [track.segments addObject:segmentKey];
     if (header.initialization) {
         if (!track.initializationWritten) {
-            [track.handle writeData:header.data];
+            @try {
+                [track.handle writeData:header.data];
+            } @catch (__unused NSException *e) {}
             track.initializationWritten = YES;
         }
         return;
     }
-    [track.handle writeData:header.data];
+    @try {
+        [track.handle writeData:header.data];
+    } @catch (__unused NSException *e) {}
     track.downloadedBytes += (int64_t)header.data.length;
     track.lastSequence = MAX(track.lastSequence, header.sequence);
     track.downloadedDuration += MAX(header.duration, 0);
@@ -1279,17 +1280,30 @@ NSUInteger YTKACEPurgeDownloadScratch(BOOL includeActive) {
                 [self retryOrFail:[self error:@"YouTube returned an incomplete SABR response." code:5]];
                 return;
             }
-            NSData *part = [response subdataWithRange:NSMakeRange(offset, size)];
-            offset += size;
             NSNumber *partType = @(type);
             partCounts[partType] = @([partCounts[partType] unsignedIntegerValue] + 1);
             partBytes[partType] = @([partBytes[partType] unsignedLongLongValue] + size);
+
+            if (type == 21) {
+                // Zero-copy direct buffer append for high-throughput media frames
+                if (size > 1) {
+                    const uint8_t *respBytes = (const uint8_t *)response.bytes + offset;
+                    YTKACESABRHeader *header = self.headers[@(respBytes[0])];
+                    if (header != nil) {
+                        [header.data appendBytes:respBytes + 1 length:size - 1];
+                    }
+                }
+                offset += size;
+                continue;
+            }
+
+            NSData *part = [response subdataWithRange:NSMakeRange(offset, size)];
+            offset += size;
             if (self.requestNumber <= 1 && (type == 46 || type == 51)) {
                 YTKACEDownloadLog(self.identifier, @"directive type=%u data=%@", type,
                     [part base64EncodedStringWithOptions:0]);
             }
             if (type == 20) [self handleHeader:part];
-            else if (type == 21) [self handleMedia:part];
             else if (type == 22) [self finishHeader:part];
             else if (type == 35) [self handlePolicy:part];
             else if (type == 42) [self handleInitialization:part];

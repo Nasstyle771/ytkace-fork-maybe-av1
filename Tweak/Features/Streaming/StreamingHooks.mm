@@ -57,17 +57,37 @@ static NSArray<NSString *> *YTKACEQualityLabels(void) {
              @"360p", @"240p", @"144p"];
 }
 
-static NSInteger YTKACEQualityIndex(void) {
-    SCNetworkReachabilityRef reachability =
-        SCNetworkReachabilityCreateWithName(NULL, "youtube.com");
-    SCNetworkReachabilityFlags flags = 0;
-    BOOL hasFlags = reachability != NULL &&
-        SCNetworkReachabilityGetFlags(reachability, &flags);
-    if (reachability != NULL) {
-        CFRelease(reachability);
+#ifndef kSCNetworkReachabilityFlagsIsWWAN
+#define kSCNetworkReachabilityFlagsIsWWAN (1 << 18)
+#endif
+
+static BOOL YTKACECachedReachabilityIsCellular(void) {
+    static SCNetworkReachabilityRef reachability = NULL;
+    static dispatch_once_t onceToken;
+    static SCNetworkReachabilityFlags cachedFlags = 0;
+    static NSTimeInterval lastCheckTime = 0.0;
+    
+    NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+    if (now - lastCheckTime < 2.0 && lastCheckTime > 0.0) {
+        return (cachedFlags & kSCNetworkReachabilityFlagsIsWWAN) != 0;
     }
-    BOOL onCellular = hasFlags &&
-        (flags & kSCNetworkReachabilityFlagsIsWWAN) != 0;
+    
+    dispatch_once(&onceToken, ^{
+        reachability = SCNetworkReachabilityCreateWithName(NULL, "youtube.com");
+    });
+    
+    if (reachability != NULL) {
+        SCNetworkReachabilityFlags flags = 0;
+        if (SCNetworkReachabilityGetFlags(reachability, &flags)) {
+            cachedFlags = flags;
+            lastCheckTime = now;
+        }
+    }
+    return (cachedFlags & kSCNetworkReachabilityFlagsIsWWAN) != 0;
+}
+
+static NSInteger YTKACEQualityIndex(void) {
+    BOOL onCellular = YTKACECachedReachabilityIsCellular();
     BOOL onWiFi = !onCellular;
     NSString *key = onWiFi ? @"YTKACE.Preference.Playback.WiFiQuality" : @"YTKACE.Preference.Playback.CellularQuality";
     id value = YTKACEPreferenceObject(key);
@@ -82,24 +102,74 @@ static NSInteger YTKACEResolution(NSString *label) {
     return [scanner scanInteger:&value] ? value : 0;
 }
 
+static NSInteger YTKACEPreferredCodecMode(void) {
+    if (YTKACEFeatureEnabled(YTKACELockAV1Key)) {
+        return 1; // AV1 Only
+    }
+    id val = YTKACEPreferenceObject(YTKACEPreferredCodecKey);
+    return [val respondsToSelector:@selector(integerValue)] ? [val integerValue] : 0;
+}
+
+static BOOL YTKACEFormatMatchesCodec(id format, NSInteger codecMode) {
+    if (codecMode == 0) return YES;
+    NSString *mime = [YTKACEValue(format, @"mimeType") lowercaseString] ?: @"";
+    NSString *codec = [YTKACEValue(format, @"codec") lowercaseString] ?: @"";
+    NSString *formatDesc = [format description].lowercaseString ?: @"";
+    
+    BOOL isAV1 = [mime containsString:@"av01"] || [mime containsString:@"av1"] ||
+                 [codec containsString:@"av01"] || [codec containsString:@"av1"] ||
+                 [formatDesc containsString:@"av01"] || [formatDesc containsString:@"av1"];
+    BOOL isH264 = [mime containsString:@"avc1"] || [mime containsString:@"h264"] || [mime containsString:@"mp4v"] ||
+                  [codec containsString:@"avc1"] || [codec containsString:@"h264"] ||
+                  [formatDesc containsString:@"avc1"] || [formatDesc containsString:@"h264"];
+    BOOL isVP9 = [mime containsString:@"vp09"] || [mime containsString:@"vp9"] ||
+                 [codec containsString:@"vp09"] || [codec containsString:@"vp9"] ||
+                 [formatDesc containsString:@"vp09"] || [formatDesc containsString:@"vp9"];
+
+    switch (codecMode) {
+        case 1: // AV1 Only
+            return isAV1;
+        case 2: // H.264 Only
+            return isH264;
+        case 3: // Prioritize AV1
+            return isAV1 || isVP9 || isH264;
+        case 4: // Prioritize H.264
+            return isH264 || isAV1 || isVP9;
+        default:
+            return YES;
+    }
+}
+
 static NSString *YTKACETargetQualityLabel(NSArray *formats, NSString *target) {
     NSString *nearest = nil;
     NSInteger nearestDistance = NSIntegerMax;
     NSInteger targetResolution = YTKACEResolution(target);
+    NSInteger codecMode = YTKACEPreferredCodecMode();
+
     for (id format in formats) {
         id value = YTKACEValue(format, @"qualityLabel");
         if (![value isKindOfClass:NSString.class]) {
             continue;
         }
         NSString *label = value;
-        if ([label isEqualToString:target]) {
-            return label;
+        BOOL codecMatch = YTKACEFormatMatchesCodec(format, codecMode);
+
+        if ([label isEqualToString:target] && (codecMatch || nearest == nil)) {
+            if (codecMatch) {
+                return label;
+            }
+            nearest = label;
+            nearestDistance = 0;
+            continue;
         }
         NSInteger resolution = YTKACEResolution(label);
         NSInteger distance = labs(resolution - targetResolution);
-        if (resolution > 0 && distance < nearestDistance) {
-            nearest = label;
-            nearestDistance = distance;
+        if (resolution > 0) {
+            NSInteger adjustedDistance = distance + (codecMatch ? 0 : 50);
+            if (adjustedDistance < nearestDistance) {
+                nearest = label;
+                nearestDistance = adjustedDistance;
+            }
         }
     }
     return nearest;
@@ -328,6 +398,15 @@ static double YTKACEHamForwardBuffer(id receiver, SEL selector) {
     return original != NULL ? ((double (*)(id, SEL))original)(receiver, selector) : 30.0;
 }
 
+static double YTKACEHamMinBuffer(id receiver, SEL selector) {
+    NSTimeInterval target = YTKACEConfiguredBufferDuration();
+    if (target > 0.0) {
+        return MIN(target * 0.25, 10.0);
+    }
+    IMP original = YTKACEStreamingOriginal(receiver, selector);
+    return original != NULL ? ((double (*)(id, SEL))original)(receiver, selector) : 2.0;
+}
+
 static BOOL YTKACECellularQualityValue(id receiver, SEL selector) {
     if (YTKACEFeatureEnabled(@"YTKACE.Preference.Playback.HDOnCellular")) {
         NSString *name = NSStringFromSelector(selector).lowercaseString;
@@ -339,6 +418,36 @@ static BOOL YTKACECellularQualityValue(id receiver, SEL selector) {
     }
     IMP original = YTKACEStreamingOriginal(receiver, selector);
     return original != NULL ? ((BOOL (*)(id, SEL))original)(receiver, selector) : NO;
+}
+
+static BOOL YTKACEHamAV1Supported(id receiver, SEL selector) {
+    NSInteger codecMode = YTKACEPreferredCodecMode();
+    if (codecMode == 1 || codecMode == 3) {
+        return YES; // AV1 Only or Prioritize AV1
+    }
+    if (codecMode == 2) {
+        return NO; // H.264 Only
+    }
+    IMP original = YTKACEStreamingOriginal(receiver, selector);
+    return original != NULL ? ((BOOL (*)(id, SEL))original)(receiver, selector) : YES;
+}
+
+static BOOL YTKACEHamVP9Supported(id receiver, SEL selector) {
+    NSInteger codecMode = YTKACEPreferredCodecMode();
+    if (codecMode == 2) {
+        return NO; // H.264 Only
+    }
+    IMP original = YTKACEStreamingOriginal(receiver, selector);
+    return original != NULL ? ((BOOL (*)(id, SEL))original)(receiver, selector) : YES;
+}
+
+static NSInteger YTKACEHamAV1BitrateCap(id receiver, SEL selector) {
+    NSInteger codecMode = YTKACEPreferredCodecMode();
+    if (codecMode == 1 || codecMode == 3) {
+        return NSIntegerMax;
+    }
+    IMP original = YTKACEStreamingOriginal(receiver, selector);
+    return original != NULL ? ((NSInteger (*)(id, SEL))original)(receiver, selector) : NSIntegerMax;
 }
 
 static void YTKACEStoreStreamingOriginal(NSString *className,
@@ -484,9 +593,35 @@ void YTKACEInstallStreamingHooks(void) {
         }
     }
 
-    for (NSString *className in @[@"YTIHamplayerHotConfig", @"HAMPlayerConfiguration", @"MLHAMPlayerItem", @"MLPlayerPool"]) {
-        for (NSString *selectorName in @[@"forwardBufferDuration", @"maxBufferDuration", @"bufferDuration", @"preferredForwardBufferDuration"]) {
-            YTKACEInstallInstanceHook(className, selectorName, (IMP)YTKACEHamForwardBuffer, NULL);
+    // Codec enablement hooks across Hamplayer configs
+    for (NSString *className in @[@"YTIHamplayerHotConfig", @"HAMPlayerConfiguration", @"MLHAMPlayerItem", @"MLABRPolicy"]) {
+        for (NSString *selectorName in @[@"enableAv1", @"isAv1Supported", @"allowAv1", @"av1Supported", @"isAV1Supported"]) {
+            YTKACEInstallBoolGetter(className, selectorName, (IMP)YTKACEHamAV1Supported);
+        }
+        for (NSString *selectorName in @[@"enableVp9", @"isVp9Supported", @"allowVp9", @"vp9Supported", @"isVP9Supported"]) {
+            YTKACEInstallBoolGetter(className, selectorName, (IMP)YTKACEHamVP9Supported);
+        }
+        for (NSString *selectorName in @[@"av1BitrateCap", @"maxAv1Bitrate"]) {
+            IMP original = NULL;
+            if (YTKACEInstallInstanceHook(className, selectorName, (IMP)YTKACEHamAV1BitrateCap, &original)) {
+                YTKACEStoreStreamingOriginal(className, selectorName, original);
+            }
+        }
+    }
+
+    // Hamplayer buffer configuration hooks
+    for (NSString *className in @[@"YTIHamplayerHotConfig", @"HAMPlayerConfiguration", @"MLHAMPlayerItem", @"MLPlayerPool", @"HAMBufferEstimator", @"HAMSimpleBufferConfig"]) {
+        for (NSString *selectorName in @[@"forwardBufferDuration", @"maxBufferDuration", @"bufferDuration", @"preferredForwardBufferDuration", @"targetBufferDuration", @"videoBufferDuration", @"audioBufferDuration"]) {
+            IMP original = NULL;
+            if (YTKACEInstallInstanceHook(className, selectorName, (IMP)YTKACEHamForwardBuffer, &original)) {
+                YTKACEStoreStreamingOriginal(className, selectorName, original);
+            }
+        }
+        for (NSString *selectorName in @[@"minBufferDuration", @"minimumBufferDuration"]) {
+            IMP original = NULL;
+            if (YTKACEInstallInstanceHook(className, selectorName, (IMP)YTKACEHamMinBuffer, &original)) {
+                YTKACEStoreStreamingOriginal(className, selectorName, original);
+            }
         }
     }
 

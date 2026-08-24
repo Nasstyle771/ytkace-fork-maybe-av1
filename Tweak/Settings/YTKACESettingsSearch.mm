@@ -1,10 +1,40 @@
 #import "YTKACESettingsSearch.h"
 #import "YTKACESettingsPages.h"
 #import "../Runtime/Localization.h"
+#import "../Runtime/Preferences.h"
 #import "../UI/Assets.h"
 
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <os/lock.h>
+
+@interface YTKACESearchRecord : NSObject
+@property(nonatomic, copy) NSString *pageID;
+@property(nonatomic, copy) NSString *pageTitle;
+@property(nonatomic, copy) NSString *header;
+@property(nonatomic, copy) NSString *title;
+@property(nonatomic, copy) NSString *subtitle;
+@property(nonatomic, assign) NSInteger section;
+@property(nonatomic, assign) NSInteger row;
+@property(nonatomic, copy) NSString *normTitle;
+@property(nonatomic, copy) NSString *normSubtitle;
+@property(nonatomic, copy) NSString *normHeader;
+@property(nonatomic, copy) NSString *normPageTitle;
+@property(nonatomic, copy) NSArray<NSString *> *titleTokens;
+@end
+
+@implementation YTKACESearchRecord
+@end
+
+static os_unfair_lock s_searchIndexLock = OS_UNFAIR_LOCK_INIT;
+static NSArray<YTKACESearchRecord *> *s_searchCatalog = nil;
+
+static NSString *YTKACENormalizeString(NSString *input) {
+    if (input.length == 0) return @"";
+    NSMutableString *str = [input mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)str, NULL, kCFStringTransformStripCombiningMarks, NO);
+    return [str.lowercaseString stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+}
 
 static UIViewController *YTKACEControllerForPageID(NSString *pageID) {
     static NSDictionary<NSString *, UIViewController *(^)(void)> *builders;
@@ -25,65 +55,215 @@ static UIViewController *YTKACEControllerForPageID(NSString *pageID) {
     return builder != nil ? builder() : nil;
 }
 
-static NSArray<NSDictionary *> *YTKACESearchIndex(void) {
-    NSMutableArray<NSDictionary *> *records = [NSMutableArray array];
+static void YTKACEInvalidateSearchIndex(void) {
+    os_unfair_lock_lock(&s_searchIndexLock);
+    s_searchCatalog = nil;
+    os_unfair_lock_unlock(&s_searchIndexLock);
+}
+
+static NSArray<YTKACESearchRecord *> *YTKACEGetSearchCatalog(void) {
+    os_unfair_lock_lock(&s_searchIndexLock);
+    if (s_searchCatalog != nil) {
+        NSArray<YTKACESearchRecord *> *cached = s_searchCatalog;
+        os_unfair_lock_unlock(&s_searchIndexLock);
+        return cached;
+    }
+    os_unfair_lock_unlock(&s_searchIndexLock);
+
+    static dispatch_once_t observerOnce;
+    dispatch_once(&observerOnce, ^{
+        [NSNotificationCenter.defaultCenter
+            addObserverForName:YTKACEPreferencesDidChangeNotification
+                        object:nil
+                         queue:NSOperationQueue.mainQueue
+                    usingBlock:^(NSNotification * _Nonnull note) {
+            NSString *key = note.userInfo[@"key"];
+            if ([key isEqualToString:@"YTKACE.Preference.Language"]) {
+                YTKACEInvalidateSearchIndex();
+            }
+        }];
+    });
+
+    NSMutableArray<YTKACESearchRecord *> *records = [NSMutableArray arrayWithCapacity:128];
     for (NSDictionary *page in YTKACEAllPageDefinitions()) {
         NSArray *sections = page[@"sections"];
         NSArray *headers = page[@"headers"];
-        NSString *pageTitle = YTKACELocalized(page[@"title"]);
+        NSString *rawPageTitle = page[@"title"];
+        NSString *pageTitle = YTKACELocalized(rawPageTitle);
+        NSString *normPageTitle = YTKACENormalizeString(pageTitle);
+        NSString *pageID = page[@"id"];
+
         for (NSUInteger section = 0; section < sections.count; section++) {
             NSArray *items = sections[section];
-            NSString *header = section < headers.count
-                ? YTKACELocalized(headers[section]) : @"";
+            NSString *rawHeader = section < headers.count ? headers[section] : @"";
+            NSString *header = rawHeader.length != 0 ? YTKACELocalized(rawHeader) : @"";
+            NSString *normHeader = YTKACENormalizeString(header);
+
             for (NSUInteger row = 0; row < items.count; row++) {
                 NSDictionary *item = items[row];
                 NSString *title = item[@"title"];
                 if (![title isKindOfClass:NSString.class] || title.length == 0) continue;
                 if ([item[@"type"] isEqualToString:@"text"]) continue;
+
                 NSString *subtitle = [item[@"subtitle"] isKindOfClass:NSString.class]
                     ? item[@"subtitle"] : @"";
-                [records addObject:@{
-                    @"pageID": page[@"id"],
-                    @"pageTitle": pageTitle,
-                    @"header": header,
-                    @"title": title,
-                    @"subtitle": subtitle,
-                    @"section": @(section),
-                    @"row": @(row)
-                }];
+
+                YTKACESearchRecord *rec = [YTKACESearchRecord new];
+                rec.pageID = pageID;
+                rec.pageTitle = pageTitle;
+                rec.header = header;
+                rec.title = title;
+                rec.subtitle = subtitle;
+                rec.section = (NSInteger)section;
+                rec.row = (NSInteger)row;
+                rec.normTitle = YTKACENormalizeString(title);
+                rec.normSubtitle = YTKACENormalizeString(subtitle);
+                rec.normHeader = normHeader;
+                rec.normPageTitle = normPageTitle;
+                rec.titleTokens = [rec.normTitle componentsSeparatedByCharactersInSet:
+                    NSCharacterSet.whitespaceCharacterSet];
+                [records addObject:rec];
             }
         }
     }
+
+    os_unfair_lock_lock(&s_searchIndexLock);
+    s_searchCatalog = records;
+    os_unfair_lock_unlock(&s_searchIndexLock);
+
     return records;
 }
 
-static NSInteger YTKACEMatchScore(NSDictionary *record, NSString *query) {
-    NSStringCompareOptions options = NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch;
-    NSRange inTitle = [record[@"title"] rangeOfString:query options:options];
-    if (inTitle.location == 0) return 0;
-    if (inTitle.location != NSNotFound) return 1;
-    if ([record[@"subtitle"] rangeOfString:query options:options].location != NSNotFound) return 2;
-    if ([record[@"header"] rangeOfString:query options:options].location != NSNotFound ||
-        [record[@"pageTitle"] rangeOfString:query options:options].location != NSNotFound) return 3;
+static NSInteger YTKACEEvaluateMatchScore(YTKACESearchRecord *record,
+                                         NSString *query,
+                                         NSArray<NSString *> *tokens) {
+    NSString *normTitle = record.normTitle;
+    if ([normTitle isEqualToString:query]) {
+        return 0; // Exact match
+    }
+    if ([normTitle hasPrefix:query]) {
+        return 5; // Title starts with full query
+    }
+
+    // Word prefix match in title
+    for (NSString *tok in record.titleTokens) {
+        if ([tok hasPrefix:query]) {
+            return 12;
+        }
+    }
+
+    // Multi-token prefix match (e.g. "bg" "play" in "Background Playback")
+    if (tokens.count > 1) {
+        BOOL allTokensMatched = YES;
+        for (NSString *qToken in tokens) {
+            if (qToken.length == 0) continue;
+            BOOL tokenFound = NO;
+            for (NSString *wToken in record.titleTokens) {
+                if ([wToken hasPrefix:qToken]) {
+                    tokenFound = YES;
+                    break;
+                }
+            }
+            if (!tokenFound && [normTitle rangeOfString:qToken].location != NSNotFound) {
+                tokenFound = YES;
+            }
+            if (!tokenFound) {
+                allTokensMatched = NO;
+                break;
+            }
+        }
+        if (allTokensMatched) {
+            return 20;
+        }
+    }
+
+    // Substring match in title
+    if ([normTitle rangeOfString:query].location != NSNotFound) {
+        return 30;
+    }
+
+    // Subtitle matching
+    NSString *normSub = record.normSubtitle;
+    if (normSub.length != 0) {
+        if ([normSub hasPrefix:query]) {
+            return 45;
+        }
+        if ([normSub rangeOfString:query].location != NSNotFound) {
+            return 55;
+        }
+        if (tokens.count > 1) {
+            BOOL allInSub = YES;
+            for (NSString *qTok in tokens) {
+                if (qTok.length > 0 && [normSub rangeOfString:qTok].location == NSNotFound) {
+                    allInSub = NO;
+                    break;
+                }
+            }
+            if (allInSub) return 60;
+        }
+    }
+
+    // Header or page title matching
+    if (record.normHeader.length != 0 && [record.normHeader rangeOfString:query].location != NSNotFound) {
+        return 70;
+    }
+    if (record.normPageTitle.length != 0 && [record.normPageTitle rangeOfString:query].location != NSNotFound) {
+        return 75;
+    }
+
+    // Acronym / Subsequence matching for short queries (2-4 chars)
+    if (query.length >= 2 && query.length <= 4) {
+        NSUInteger qIdx = 0;
+        const char *qStr = query.UTF8String;
+        const char *tStr = normTitle.UTF8String;
+        if (qStr && tStr) {
+            size_t qLen = strlen(qStr);
+            size_t tLen = strlen(tStr);
+            size_t tIdx = 0;
+            while (qIdx < qLen && tIdx < tLen) {
+                if (qStr[qIdx] == tStr[tIdx]) {
+                    qIdx++;
+                }
+                tIdx++;
+            }
+            if (qIdx == qLen) {
+                return 85;
+            }
+        }
+    }
+
     return NSNotFound;
 }
 
 NSArray<NSDictionary *> *YTKACEFilterSettings(NSString *query) {
-    NSString *trimmed = [query stringByTrimmingCharactersInSet:
+    NSString *normalizedQuery = YTKACENormalizeString(query);
+    if (normalizedQuery.length == 0) return @[];
+
+    NSArray<NSString *> *tokens = [normalizedQuery componentsSeparatedByCharactersInSet:
         NSCharacterSet.whitespaceCharacterSet];
-    if (trimmed.length == 0) return @[];
     NSMutableArray<NSDictionary *> *scored = [NSMutableArray array];
-    for (NSDictionary *record in YTKACESearchIndex()) {
-        NSInteger score = YTKACEMatchScore(record, trimmed);
+
+    for (YTKACESearchRecord *record in YTKACEGetSearchCatalog()) {
+        NSInteger score = YTKACEEvaluateMatchScore(record, normalizedQuery, tokens);
         if (score == NSNotFound) continue;
-        NSMutableDictionary *entry = [record mutableCopy];
-        entry[@"score"] = @(score);
-        [scored addObject:entry];
+
+        [scored addObject:@{
+            @"pageID": record.pageID,
+            @"pageTitle": record.pageTitle,
+            @"header": record.header,
+            @"title": record.title,
+            @"subtitle": record.subtitle,
+            @"section": @(record.section),
+            @"row": @(record.row),
+            @"score": @(score)
+        }];
     }
+
     [scored sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
         NSComparisonResult order = [a[@"score"] compare:b[@"score"]];
-        return order != NSOrderedSame ? order : [a[@"title"] compare:b[@"title"]];
+        return order != NSOrderedSame ? order : [a[@"title"] localizedCaseInsensitiveCompare:b[@"title"]];
     }];
+
     return scored;
 }
 
@@ -100,7 +280,7 @@ void YTKACEOpenSettingsRecord(NSDictionary *record, UIViewController *presenter)
     } else {
         return;
     }
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.40 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (![page isKindOfClass:UITableViewController.class]) return;
         UITableView *table = ((UITableViewController *)page).tableView;
@@ -109,14 +289,14 @@ void YTKACEOpenSettingsRecord(NSDictionary *record, UIViewController *presenter)
         [table scrollToRowAtIndexPath:target
                      atScrollPosition:UITableViewScrollPositionMiddle
                              animated:YES];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)),
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.30 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
             UITableViewCell *cell = [table cellForRowAtIndexPath:target];
             if (cell == nil) return;
             UIColor *original = cell.contentView.backgroundColor;
             cell.contentView.backgroundColor =
                 [YTKACEAccentColor() colorWithAlphaComponent:0.28];
-            [UIView animateWithDuration:0.9 delay:0.4
+            [UIView animateWithDuration:0.8 delay:0.3
                                 options:UIViewAnimationOptionCurveEaseOut
                              animations:^{ cell.contentView.backgroundColor = original; }
                              completion:nil];
@@ -137,7 +317,7 @@ void YTKACEOpenSettingsRecord(NSDictionary *record, UIViewController *presenter)
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.results = @[];
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = YTKACEInterfaceBackgroundColor(self.traitCollection);
 
     self.searchBar = [UISearchBar new];
     self.searchBar.delegate = self;

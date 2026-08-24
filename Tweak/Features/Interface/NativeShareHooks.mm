@@ -17,16 +17,20 @@ static id YTKACEShareValue(id object, NSString *name) {
 static NSString *YTKACESerializedShareEntity(id receiver,
                                                id onAppear,
                                                id context) {
-    NSRegularExpression *expression = [NSRegularExpression
-        regularExpressionWithPattern:@"serialized_share_entity: \"([^\"]+)\""
-        options:0 error:nil];
-    if (expression == nil) return nil;
+    static NSRegularExpression *s_expression = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_expression = [NSRegularExpression
+            regularExpressionWithPattern:@"serialized_share_entity: \"([^\"]+)\""
+            options:0 error:nil];
+    });
+    if (s_expression == nil) return nil;
     for (id object in @[receiver ?: NSNull.null,
                         onAppear ?: NSNull.null,
                         context ?: NSNull.null]) {
         if (object == NSNull.null) continue;
         NSString *description = [object description];
-        NSTextCheckingResult *match = [expression
+        NSTextCheckingResult *match = [s_expression
             firstMatchInString:description options:0
             range:NSMakeRange(0, description.length)];
         if (match.numberOfRanges > 1) {

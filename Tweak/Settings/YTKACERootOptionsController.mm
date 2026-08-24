@@ -379,9 +379,26 @@ UIViewController *YTKACEMakeDownloadLogController(void) {
     return footer;
 }
 
+static UIImage *s_cachedSponsorIcon = nil;
+static UIImage *s_cachedShortsIcon = nil;
+static NSMutableDictionary<NSString *, UIImage *> *s_cachedTemplateIcons = nil;
+
+static UIImage *YTKACECachedTemplateImage(NSString *asset, NSString *symbol) {
+    NSString *key = [NSString stringWithFormat:@"%@:%@", asset ?: @"", symbol ?: @""];
+    if (s_cachedTemplateIcons == nil) {
+        s_cachedTemplateIcons = [NSMutableDictionary dictionaryWithCapacity:16];
+    }
+    UIImage *img = s_cachedTemplateIcons[key];
+    if (img == nil) {
+        img = YTKACETemplateImage(asset, symbol);
+        if (img != nil) s_cachedTemplateIcons[key] = img;
+    }
+    return img;
+}
+
 - (UITableViewCell *)baseCellForTableView:(UITableView *)tableView
-                                    style:(UITableViewCellStyle)style {
-    NSString *identifier = [NSString stringWithFormat:@"YTKACERoot-%ld", (long)style];
+                                    style:(UITableViewCellStyle)style
+                               identifier:(NSString *)identifier {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
     if (cell == nil) {
         cell = [[UITableViewCell alloc] initWithStyle:style reuseIdentifier:identifier];
@@ -395,36 +412,35 @@ UIViewController *YTKACEMakeDownloadLogController(void) {
     cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
     cell.imageView.tintColor = UIColor.labelColor;
     cell.imageView.image = nil;
-    cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     return cell;
 }
 
-- (void)configureImageForCell:(UITableViewCell *)cell
-                         asset:(NSString *)asset
-                         symbol:(NSString *)symbol {
-    cell.imageView.image = YTKACETemplateImage(asset, symbol);
-}
-
 - (UITableViewCell *)tableView:(UITableView *)tableView
          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.section == 0) {
-        UITableViewCell *cell = [self baseCellForTableView:tableView style:UITableViewCellStyleSubtitle];
+        static NSString *const kActiveCellID = @"YTKACERoot_ActiveCell";
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:kActiveCellID];
+        UILabel *status = nil;
+        if (cell == nil) {
+            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:kActiveCellID];
+            cell.backgroundColor = YTKACERootCellBackground();
+            cell.textLabel.font = [UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold];
+            cell.textLabel.textColor = UIColor.labelColor;
+            cell.selectionStyle = UITableViewCellSelectionStyleNone;
+            status = [[UILabel alloc] initWithFrame:CGRectMake(0.0, 0.0, 72.0, 28.0)];
+            status.text = YTKACELocalized(@"ACTIVE");
+            status.textAlignment = NSTextAlignmentCenter;
+            status.font = [UIFont systemFontOfSize:11.0 weight:UIFontWeightBold];
+            status.textColor = UIColor.systemGreenColor;
+            status.backgroundColor = [UIColor.systemGreenColor colorWithAlphaComponent:0.14];
+            status.layer.cornerRadius = 14.0;
+            status.layer.masksToBounds = YES;
+            cell.accessoryView = status;
+        }
         cell.textLabel.text = YTKACELocalized(@"Enabled");
-        cell.textLabel.font = [UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold];
-        cell.detailTextLabel.text = nil;
-        [self configureImageForCell:cell asset:@"" symbol:@"power"];
-        UILabel *status = [[UILabel alloc] initWithFrame:CGRectMake(0.0, 0.0, 72.0, 28.0)];
-        status.text = YTKACELocalized(@"ACTIVE");
-        status.textAlignment = NSTextAlignmentCenter;
-        status.font = [UIFont systemFontOfSize:11.0 weight:UIFontWeightBold];
-        status.textColor = UIColor.systemGreenColor;
-        status.backgroundColor = [UIColor.systemGreenColor colorWithAlphaComponent:0.14];
-        status.layer.cornerRadius = 14.0;
-        status.layer.masksToBounds = YES;
-        cell.accessoryView = status;
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        cell.imageView.image = YTKACECachedTemplateImage(@"", @"power");
         return cell;
     }
 
@@ -439,11 +455,17 @@ UIViewController *YTKACEMakeDownloadLogController(void) {
         ];
         NSArray *symbols = @[@"play.rectangle", @"play.shield",
                              @"rectangle.bottomthird.inset.filled", @"hand.draw"];
-        UITableViewCell *cell = [self baseCellForTableView:tableView style:UITableViewCellStyleSubtitle];
+        UITableViewCell *cell = [self baseCellForTableView:tableView
+                                                     style:UITableViewCellStyleSubtitle
+                                                identifier:@"YTKACERoot_SubRow"];
         cell.textLabel.text = titles[(NSUInteger)indexPath.row];
         cell.detailTextLabel.text = details[(NSUInteger)indexPath.row];
-        [self configureImageForCell:cell asset:@"" symbol:symbols[(NSUInteger)indexPath.row]];
-        if (indexPath.row == 1) cell.imageView.image = YTKACESponsorIcon();
+        if (indexPath.row == 1) {
+            if (s_cachedSponsorIcon == nil) s_cachedSponsorIcon = YTKACESponsorIcon();
+            cell.imageView.image = s_cachedSponsorIcon;
+        } else {
+            cell.imageView.image = YTKACECachedTemplateImage(@"", symbols[(NSUInteger)indexPath.row]);
+        }
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         return cell;
     }
@@ -461,29 +483,37 @@ UIViewController *YTKACEMakeDownloadLogController(void) {
         ];
         NSArray *symbols = @[@"rectangle.on.rectangle", @"playpause",
                              @"", @"wifi", @"antenna.radiowaves.left.and.right"];
-        UITableViewCell *cell = [self baseCellForTableView:tableView style:UITableViewCellStyleSubtitle];
+        BOOL quality = indexPath.row >= 3;
+        NSString *identifier = quality ? @"YTKACERoot_QualityRow" : @"YTKACERoot_SubRow";
+        UITableViewCell *cell = [self baseCellForTableView:tableView
+                                                     style:UITableViewCellStyleSubtitle
+                                                identifier:identifier];
         cell.textLabel.text = titles[(NSUInteger)indexPath.row];
         cell.detailTextLabel.text = details[(NSUInteger)indexPath.row];
         if (indexPath.row == 2) {
-            cell.imageView.image = YTKACEShortsIcon();
+            if (s_cachedShortsIcon == nil) s_cachedShortsIcon = YTKACEShortsIcon();
+            cell.imageView.image = s_cachedShortsIcon;
         } else {
-            [self configureImageForCell:cell asset:@"" symbol:symbols[(NSUInteger)indexPath.row]];
+            cell.imageView.image = YTKACECachedTemplateImage(@"", symbols[(NSUInteger)indexPath.row]);
         }
-        BOOL quality = indexPath.row >= 3;
         if (!quality) {
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            cell.accessoryView = nil;
         } else {
             NSString *key = indexPath.row == 3 ? @"YTKACE.Preference.Playback.WiFiQuality" : @"YTKACE.Preference.Playback.CellularQuality";
             NSArray *options = @[YTKACELocalized(@"Auto"), @"2160p60", @"2160p", @"1440p60", @"1440p",
                                  @"1080p60", @"1080p", @"720p60", @"720p", @"480p",
                                  @"360p", @"240p", @"144p"];
             NSArray *values = @[@0, @1, @2, @3, @4, @5, @6, @7, @8, @9, @10, @11, @12];
-            UILabel *value = [[UILabel alloc] initWithFrame:CGRectMake(0.0, 0.0, 66.0, 28.0)];
-            value.text = YTKACEPickerSummary(key, options, values, 0);
-            value.textAlignment = NSTextAlignmentRight;
-            value.font = [UIFont systemFontOfSize:15.0];
-            value.textColor = YTKACEAccentColor();
-            cell.accessoryView = value;
+            UILabel *valueLabel = (UILabel *)cell.accessoryView;
+            if (valueLabel == nil || ![valueLabel isKindOfClass:UILabel.class]) {
+                valueLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0, 0.0, 66.0, 28.0)];
+                valueLabel.textAlignment = NSTextAlignmentRight;
+                valueLabel.font = [UIFont systemFontOfSize:15.0];
+                cell.accessoryView = valueLabel;
+            }
+            valueLabel.textColor = YTKACEAccentColor();
+            valueLabel.text = YTKACEPickerSummary(key, options, values, 0);
         }
         return cell;
     }
@@ -495,29 +525,45 @@ UIViewController *YTKACEMakeDownloadLogController(void) {
             YTKACELocalized(@"Appearance, privacy, and compatibility")
         ];
         NSArray *symbols = @[@"rectangle.topthird.inset.filled", @"ellipsis.circle"];
-        UITableViewCell *cell = [self baseCellForTableView:tableView style:UITableViewCellStyleSubtitle];
+        UITableViewCell *cell = [self baseCellForTableView:tableView
+                                                     style:UITableViewCellStyleSubtitle
+                                                identifier:@"YTKACERoot_SubRow"];
         cell.textLabel.text = titles[(NSUInteger)indexPath.row];
         cell.detailTextLabel.text = details[(NSUInteger)indexPath.row];
-        [self configureImageForCell:cell asset:@"" symbol:symbols[(NSUInteger)indexPath.row]];
+        cell.imageView.image = YTKACECachedTemplateImage(@"", symbols[(NSUInteger)indexPath.row]);
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         return cell;
     }
 
     if (indexPath.row == 1) {
-        UITableViewCell *cell = [self baseCellForTableView:tableView style:UITableViewCellStyleDefault];
+        static NSString *const kInfoCellID = @"YTKACERoot_InfoRow";
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:kInfoCellID];
+        if (cell == nil) {
+            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:kInfoCellID];
+            cell.backgroundColor = YTKACERootCellBackground();
+            cell.textLabel.textColor = UIColor.secondaryLabelColor;
+            cell.textLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightRegular];
+            cell.textLabel.numberOfLines = 3;
+            cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        }
         cell.textLabel.text = [self deviceInformationText];
-        cell.textLabel.textColor = UIColor.secondaryLabelColor;
-        cell.textLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightRegular];
-        cell.textLabel.numberOfLines = 3;
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
         return cell;
     }
 
-    UITableViewCell *cell = [self baseCellForTableView:tableView style:UITableViewCellStyleValue1];
+    static NSString *const kProfileCellID = @"YTKACERoot_ProfileRow";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:kProfileCellID];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:kProfileCellID];
+        cell.backgroundColor = YTKACERootCellBackground();
+        cell.textLabel.font = [UIFont systemFontOfSize:17.0];
+        cell.detailTextLabel.font = [UIFont systemFontOfSize:14.0];
+        cell.textLabel.textColor = UIColor.labelColor;
+        cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+        cell.detailTextLabel.text = @"YTKACE";
+        cell.imageView.image = YTKACEAssetImage(@"YTKIco", @"person.crop.circle");
+        cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    }
     cell.textLabel.text = YTKACELocalized(@"itzzace");
-    cell.detailTextLabel.text = @"YTKACE";
-    cell.imageView.image = YTKACEAssetImage(@"YTKIco", @"person.crop.circle");
-    cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     return cell;
 }
 

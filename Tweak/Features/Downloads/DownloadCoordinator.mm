@@ -35,6 +35,7 @@
 @property(nonatomic, assign) int64_t audioBytes;
 @property(nonatomic, assign) int64_t videoBytes;
 @property(nonatomic, strong, nullable) NSURL *savedURL;
+@property(nonatomic, assign) UIBackgroundTaskIdentifier bgTask;
 @end
 
 static const void *YTKACEShortsFullscreenKey = &YTKACEShortsFullscreenKey;
@@ -1052,6 +1053,16 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
                 if (videoURL != nil) {
                     [NSFileManager.defaultManager removeItemAtURL:videoURL error:nil];
                 }
+                if (job.bgTask == UIBackgroundTaskInvalid || job.bgTask == 0) {
+                    __weak YTKACEDownloadJob *weakJob = job;
+                    job.bgTask = [UIApplication.sharedApplication beginBackgroundTaskWithName:@"YTKACEAudioFinalize" expirationHandler:^{
+                        YTKACEDownloadJob *strongJob = weakJob;
+                        if (strongJob != nil && strongJob.bgTask != UIBackgroundTaskInvalid) {
+                            [UIApplication.sharedApplication endBackgroundTask:strongJob.bgTask];
+                            strongJob.bgTask = UIBackgroundTaskInvalid;
+                        }
+                    }];
+                }
                 [YTKACEDownloadProgressView.sharedView updateJob:job.identifier
                     stage:YTKACELocalized(@"Finalizing") progress:0.96
                     downloadedBytes:job.audioBytes totalBytes:job.audioBytes];
@@ -1061,6 +1072,10 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
                 [YTKACEFFmpegMuxer remuxAudioURL:audioURL outputURL:output
                     completion:^(NSError *remuxError) {
                         if (remuxError != nil) {
+                            if (job.bgTask != UIBackgroundTaskInvalid && job.bgTask != 0) {
+                                [UIApplication.sharedApplication endBackgroundTask:job.bgTask];
+                                job.bgTask = UIBackgroundTaskInvalid;
+                            }
                             [YTKACEDownloadProgressView.sharedView
                                 finishJob:job.identifier success:NO message:YTKACELocalized(@"Failed")];
                             YTKACEDownloadLog(job.identifier,
@@ -1080,6 +1095,16 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
                         [weakSelf saveCompletedURL:output job:job extension:@"m4a"];
                     }];
                 return;
+            }
+            if (job.bgTask == UIBackgroundTaskInvalid || job.bgTask == 0) {
+                __weak YTKACEDownloadJob *weakJob = job;
+                job.bgTask = [UIApplication.sharedApplication beginBackgroundTaskWithName:@"YTKACEVideoMerge" expirationHandler:^{
+                    YTKACEDownloadJob *strongJob = weakJob;
+                    if (strongJob != nil && strongJob.bgTask != UIBackgroundTaskInvalid) {
+                        [UIApplication.sharedApplication endBackgroundTask:strongJob.bgTask];
+                        strongJob.bgTask = UIBackgroundTaskInvalid;
+                    }
+                }];
             }
             [YTKACEDownloadProgressView.sharedView updateJob:job.identifier
                 stage:YTKACELocalized(@"Merging") progress:0.96
@@ -1202,6 +1227,10 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
         [NSNotificationCenter.defaultCenter
             postNotificationName:@"YTKACEDownloadLibraryChanged" object:nil];
     }
+    if (job.bgTask != UIBackgroundTaskInvalid && job.bgTask != 0) {
+        [UIApplication.sharedApplication endBackgroundTask:job.bgTask];
+        job.bgTask = UIBackgroundTaskInvalid;
+    }
     [self.activeJobs removeObjectForKey:job.identifier];
 }
 
@@ -1216,6 +1245,10 @@ static void YTKACESetShortsOverlayFullscreen(UIView *overlay,
     [YTKACEFFmpegMuxer remuxVideoURL:videoURL audioURL:audioURL
         outputURL:output completion:^(NSError *error) {
             if (error != nil) {
+                if (job.bgTask != UIBackgroundTaskInvalid && job.bgTask != 0) {
+                    [UIApplication.sharedApplication endBackgroundTask:job.bgTask];
+                    job.bgTask = UIBackgroundTaskInvalid;
+                }
                 [YTKACEDownloadProgressView.sharedView finishJob:job.identifier
                     success:NO message:YTKACELocalized(@"Failed")];
                 YTKACEDownloadLog(job.identifier, @"merge failed error=%@",

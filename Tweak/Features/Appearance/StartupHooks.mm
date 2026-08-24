@@ -9,10 +9,10 @@
 static NSMutableDictionary<NSString *, NSValue *> *YTKACEStartupOriginals;
 
 static IMP YTKACEStartupOriginal(id receiver, SEL selector) {
+    const char *selName = sel_getName(selector) ?: "";
     for (Class cls = [receiver class]; cls != Nil; cls = class_getSuperclass(cls)) {
-        NSString *key = [NSString stringWithFormat:@"%@|%@",
-                         NSStringFromClass(cls),
-                         NSStringFromSelector(selector)];
+        NSString *key = [NSString stringWithFormat:@"%s|%s",
+                         class_getName(cls), selName];
         NSValue *value = YTKACEStartupOriginals[key];
         if (value == nil) continue;
         IMP implementation = NULL;
@@ -34,7 +34,7 @@ static void YTKACEStartupBlacken(UIView *view, UIColor *color) {
 }
 
 static void YTKACEFinishStartup(UIViewController *receiver) {
-    SEL delegateSelector = NSSelectorFromString(@"delegate");
+    SEL delegateSelector = @selector(delegate);
     id delegate = [receiver respondsToSelector:delegateSelector]
         ? ((id (*)(id, SEL))objc_msgSend)(receiver, delegateSelector)
         : nil;
@@ -43,8 +43,7 @@ static void YTKACEFinishStartup(UIViewController *receiver) {
         ((void (*)(id, SEL))objc_msgSend)(delegate, completionSelector);
         return;
     }
-    SEL forceSelector =
-        NSSelectorFromString(@"forceDismissStartupAnimationAnimated:");
+    SEL forceSelector = NSSelectorFromString(@"forceDismissStartupAnimationAnimated:");
     if ([delegate respondsToSelector:forceSelector]) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(delegate, forceSelector, NO);
         return;

@@ -197,8 +197,8 @@ static YTKACEStreamOption *YTKACEOptionFromFormat(id format, BOOL adaptive) {
     option.rawFormat = format;
     id audioTrack = YTKACEStreamObject(format, @[@"audioTrack"]);
     NSString *language = YTKACEStringValue(YTKACEStreamObject(
-        audioTrack, @[@"displayName", @"display_name", @"name"]));
-    if (language.length == 0) {
+        audioTrack, @[@"displayName", @"display_name", @"name", @"languageName", @"title"]));
+    if (language.length == 0 && audioTrack != nil) {
         NSString *description = [audioTrack description];
         NSRange marker = [description rangeOfString:@"display_name: \""];
         if (marker.location != NSNotFound) {
@@ -213,8 +213,8 @@ static YTKACEStreamOption *YTKACEOptionFromFormat(id format, BOOL adaptive) {
     }
     option.languageLabel = language.length != 0 ? language : YTKACELocalized(@"Original audio");
     NSString *trackID = YTKACEStringValue(YTKACEStreamObject(
-        audioTrack, @[@"id_p", @"audioTrackId", @"audioTrackID"]));
-    if (trackID.length == 0) {
+        audioTrack, @[@"id_p", @"audioTrackId", @"audioTrackID", @"id"]));
+    if (trackID.length == 0 && audioTrack != nil) {
         NSString *description = [audioTrack description];
         NSRange marker = [description rangeOfString:@"id: \""];
         if (marker.location != NSNotFound) {
@@ -229,7 +229,7 @@ static YTKACEStreamOption *YTKACEOptionFromFormat(id format, BOOL adaptive) {
     }
     option.audioTrackID = trackID ?: @"";
     option.defaultAudio = YTKACEStreamInteger(
-        audioTrack, @[@"audioIsDefault", @"isDefault", @"defaultAudio"]) != 0;
+        audioTrack, @[@"audioIsDefault", @"isDefault", @"defaultAudio", @"is_default"]) != 0;
     return option;
 }
 

@@ -55,11 +55,49 @@ static int64_t YTKACEPacketTime(AVPacket *packet, AVStream *stream) {
         av_rescale_q(value, stream->time_base, AV_TIME_BASE_Q);
 }
 
-static int YTKACEWritePacket(AVFormatContext *output, AVPacket *packet,
-                             AVStream *inputStream, AVStream *outputStream) {
+struct YTKACETimestampSync {
+    int64_t last_dts;
+    int64_t last_pts;
+    int64_t start_dts;
+    bool has_dts;
+};
+
+static int YTKACEWriteSyncedPacket(AVFormatContext *output, AVPacket *packet,
+                                   AVStream *inputStream, AVStream *outputStream,
+                                   YTKACETimestampSync *sync) {
     av_packet_rescale_ts(packet, inputStream->time_base, outputStream->time_base);
     packet->stream_index = outputStream->index;
     packet->pos = -1;
+
+    if (packet->dts != AV_NOPTS_VALUE && packet->pts != AV_NOPTS_VALUE) {
+        if (packet->dts > packet->pts) {
+            packet->dts = packet->pts;
+        }
+    } else if (packet->dts == AV_NOPTS_VALUE && packet->pts != AV_NOPTS_VALUE) {
+        packet->dts = packet->pts;
+    } else if (packet->pts == AV_NOPTS_VALUE && packet->dts != AV_NOPTS_VALUE) {
+        packet->pts = packet->dts;
+    }
+
+    if (sync != NULL) {
+        if (!sync->has_dts) {
+            sync->has_dts = true;
+            sync->start_dts = packet->dts != AV_NOPTS_VALUE ? packet->dts : 0;
+        }
+        if (packet->dts != AV_NOPTS_VALUE) {
+            if (sync->last_dts != AV_NOPTS_VALUE && packet->dts <= sync->last_dts) {
+                packet->dts = sync->last_dts + 1;
+                if (packet->pts != AV_NOPTS_VALUE && packet->pts < packet->dts) {
+                    packet->pts = packet->dts;
+                }
+            }
+            sync->last_dts = packet->dts;
+        }
+        if (packet->pts != AV_NOPTS_VALUE) {
+            sync->last_pts = packet->pts;
+        }
+    }
+
     int result = av_interleaved_write_frame(output, packet);
     av_packet_unref(packet);
     return result;
@@ -81,6 +119,9 @@ static NSError *YTKACERemux(NSURL *videoURL, NSURL *audioURL,
     int audioIndex = -1;
     BOOL hasVideo = NO;
     BOOL hasAudio = NO;
+    YTKACETimestampSync videoSync = { AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0, false };
+    YTKACETimestampSync audioSync = { AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0, false };
+
     NSString *stage = @"Open video";
     int result = YTKACEOpenInput(videoURL, AVMEDIA_TYPE_VIDEO, &video, &videoIndex);
     if (result < 0) goto cleanup;
@@ -119,8 +160,8 @@ static NSError *YTKACERemux(NSURL *videoURL, NSURL *audioURL,
     }
     av_dict_set(&options, "movflags", "+faststart", 0);
     av_dict_set(&options, "threads", "auto", 0);
-    av_dict_set(&options, "max_interleave_delta", "100000", 0);
-    output->max_interleave_delta = 100000;
+    av_dict_set(&options, "max_interleave_delta", "200000", 0);
+    output->max_interleave_delta = 200000;
     result = avformat_write_header(output, &options);
     stage = @"Write header";
     if (result < 0) goto cleanup;
@@ -141,12 +182,12 @@ static NSError *YTKACERemux(NSURL *videoURL, NSURL *audioURL,
                 YTKACEPacketTime(audioPacket, audioInput);
         }
         if (writeVideo) {
-            result = YTKACEWritePacket(output, videoPacket, videoInput, videoOutput);
+            result = YTKACEWriteSyncedPacket(output, videoPacket, videoInput, videoOutput, &videoSync);
             stage = @"Write video";
             if (result < 0) goto cleanup;
             hasVideo = YTKACEReadPacket(video, videoIndex, videoPacket) >= 0;
         } else {
-            result = YTKACEWritePacket(output, audioPacket, audioInput, audioOutput);
+            result = YTKACEWriteSyncedPacket(output, audioPacket, audioInput, audioOutput, &audioSync);
             stage = @"Write audio";
             if (result < 0) goto cleanup;
             hasAudio = YTKACEReadPacket(audio, audioIndex, audioPacket) >= 0;
@@ -176,6 +217,7 @@ static NSError *YTKACERemuxAudio(NSURL *audioURL, NSURL *outputURL) {
     AVStream *audioOutput = NULL;
     AVDictionary *options = NULL;
     int audioIndex = -1;
+    YTKACETimestampSync audioSync = { AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0, false };
     NSString *stage = @"Open audio";
     int result = YTKACEOpenInput(audioURL, AVMEDIA_TYPE_AUDIO, &audio, &audioIndex);
     if (result < 0) goto cleanup;
@@ -214,7 +256,7 @@ static NSError *YTKACERemuxAudio(NSURL *audioURL, NSURL *outputURL) {
         goto cleanup;
     }
     while ((result = YTKACEReadPacket(audio, audioIndex, packet)) >= 0) {
-        result = YTKACEWritePacket(output, packet, audioInput, audioOutput);
+        result = YTKACEWriteSyncedPacket(output, packet, audioInput, audioOutput, &audioSync);
         stage = @"Write audio";
         if (result < 0) goto cleanup;
     }
@@ -227,6 +269,122 @@ cleanup:
     av_dict_free(&options);
     av_packet_free(&packet);
     avformat_close_input(&audio);
+    if (output != NULL) {
+        if (output->pb != NULL) avio_closep(&output->pb);
+        avformat_free_context(output);
+    }
+    return result < 0 ? YTKACEFFmpegError(result, stage) : nil;
+}
+
+static NSError *YTKACENormalizeMedia(NSURL *mediaURL, NSURL *outputURL) {
+    AVFormatContext *input = NULL;
+    AVFormatContext *output = NULL;
+    AVPacket *packet = NULL;
+    AVDictionary *options = NULL;
+    NSString *stage = @"Open media";
+    int result = avformat_open_input(&input, mediaURL.fileSystemRepresentation, NULL, NULL);
+    if (result < 0) goto cleanup;
+    result = avformat_find_stream_info(input, NULL);
+    if (result < 0) goto cleanup;
+
+    result = avformat_alloc_output_context2(&output, NULL, "mp4", outputURL.fileSystemRepresentation);
+    stage = @"Create output";
+    if (result < 0 || output == NULL) {
+        if (result >= 0) result = AVERROR_UNKNOWN;
+        goto cleanup;
+    }
+
+    int *streamMapping = (int *)av_calloc(input->nb_streams, sizeof(int));
+    if (!streamMapping) {
+        result = AVERROR(ENOMEM);
+        goto cleanup;
+    }
+    for (unsigned int i = 0; i < input->nb_streams; i++) {
+        streamMapping[i] = -1;
+    }
+
+    int outStreamCount = 0;
+    for (unsigned int i = 0; i < input->nb_streams; i++) {
+        AVStream *inStream = input->streams[i];
+        enum YTKACEFFmpegMediaType type = inStream->codecpar->codec_type;
+        if (type == AVMEDIA_TYPE_VIDEO || type == AVMEDIA_TYPE_AUDIO || type == AVMEDIA_TYPE_SUBTITLE) {
+            AVStream *outStream = avformat_new_stream(output, NULL);
+            if (!outStream) {
+                av_free(streamMapping);
+                result = AVERROR(ENOMEM);
+                goto cleanup;
+            }
+            result = avcodec_parameters_copy(outStream->codecpar, inStream->codecpar);
+            if (result < 0) {
+                av_free(streamMapping);
+                goto cleanup;
+            }
+            outStream->codecpar->codec_tag = 0;
+            outStream->time_base = inStream->time_base;
+            streamMapping[i] = outStreamCount++;
+        }
+    }
+
+    if (outStreamCount == 0) {
+        av_free(streamMapping);
+        result = AVERROR_STREAM_NOT_FOUND;
+        goto cleanup;
+    }
+
+    if ((output->oformat->flags & AVFMT_NOFILE) == 0) {
+        result = avio_open(&output->pb, outputURL.fileSystemRepresentation, AVIO_FLAG_WRITE);
+        stage = @"Open output";
+        if (result < 0) {
+            av_free(streamMapping);
+            goto cleanup;
+        }
+    }
+
+    av_dict_set(&options, "movflags", "+faststart", 0);
+    av_dict_set(&options, "threads", "auto", 0);
+    result = avformat_write_header(output, &options);
+    stage = @"Write header";
+    if (result < 0) {
+        av_free(streamMapping);
+        goto cleanup;
+    }
+
+    packet = av_packet_alloc();
+    if (!packet) {
+        av_free(streamMapping);
+        result = AVERROR(ENOMEM);
+        goto cleanup;
+    }
+
+    while ((result = av_read_frame(input, packet)) >= 0) {
+        int outIndex = streamMapping[packet->stream_index];
+        if (outIndex < 0) {
+            av_packet_unref(packet);
+            continue;
+        }
+        AVStream *inStream = input->streams[packet->stream_index];
+        AVStream *outStream = output->streams[outIndex];
+        av_packet_rescale_ts(packet, inStream->time_base, outStream->time_base);
+        packet->stream_index = outIndex;
+        packet->pos = -1;
+        result = av_interleaved_write_frame(output, packet);
+        av_packet_unref(packet);
+        if (result < 0) {
+            stage = @"Write frame";
+            break;
+        }
+    }
+    av_free(streamMapping);
+    if (result == AVERROR_EOF) result = 0;
+    if (result < 0) goto cleanup;
+
+    result = av_write_trailer(output);
+    stage = @"Write trailer";
+
+cleanup:
+    av_dict_free(&options);
+    av_packet_free(&packet);
+    avformat_close_input(&input);
     if (output != NULL) {
         if (output->pb != NULL) avio_closep(&output->pb);
         avformat_free_context(output);
@@ -265,7 +423,7 @@ cleanup:
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
         av_log_set_level(AV_LOG_ERROR);
-        NSError *error = YTKACERemux(mediaURL, mediaURL, outputURL);
+        NSError *error = YTKACENormalizeMedia(mediaURL, outputURL);
         dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
     });
 }
@@ -310,16 +468,18 @@ cleanup:
         NSError *error = exporter.error;
         if (exporter.status == AVAssetExportSessionStatusCompleted) {
             NSFileManager *manager = NSFileManager.defaultManager;
-            NSURL *backup = [mediaURL.URLByDeletingLastPathComponent
-                URLByAppendingPathComponent:[@"." stringByAppendingString:
-                    NSUUID.UUID.UUIDString]];
-            if (![manager moveItemAtURL:mediaURL toURL:backup error:&error] ||
-                ![manager moveItemAtURL:temporary toURL:mediaURL error:&error]) {
-                if (![manager fileExistsAtPath:mediaURL.path]) {
-                    [manager moveItemAtURL:backup toURL:mediaURL error:nil];
+            NSURL *resultingURL = nil;
+            if (![manager replaceItemAtURL:mediaURL withItemAtURL:temporary backupItemName:nil options:0 resultingItemURL:&resultingURL error:&error]) {
+                // Fallback atomic move
+                NSURL *backup = [mediaURL.URLByDeletingLastPathComponent
+                    URLByAppendingPathComponent:[@"." stringByAppendingString:NSUUID.UUID.UUIDString]];
+                if ([manager moveItemAtURL:mediaURL toURL:backup error:nil]) {
+                    if (![manager moveItemAtURL:temporary toURL:mediaURL error:&error]) {
+                        [manager moveItemAtURL:backup toURL:mediaURL error:nil];
+                    } else {
+                        [manager removeItemAtURL:backup error:nil];
+                    }
                 }
-            } else {
-                [manager removeItemAtURL:backup error:nil];
             }
         }
         [NSFileManager.defaultManager removeItemAtURL:temporary error:nil];

@@ -108,13 +108,24 @@ static NSString *YTKACENativeSettingsSubtitle(NSString *title) {
     return value != nil ? YTKACELocalized(value) : nil;
 }
 
+static NSMutableDictionary<NSString *, UIImage *> *s_cachedSquaredIcons = nil;
+static NSCache<NSString *, UIImage *> *s_cachedTintedIcons = nil;
+
 static UIImage *YTKACESettingIconStoredImage(id receiver) {
     return objc_getAssociatedObject(receiver, YTKACESettingIconImageKey);
 }
 
 static UIImage *YTKACETintedIcon(UIImage *image, UIColor *color) {
     if (image == nil) return nil;
+    if (s_cachedTintedIcons == nil) {
+        s_cachedTintedIcons = [NSCache new];
+        s_cachedTintedIcons.countLimit = 64;
+    }
     UIColor *fill = color ?: UIColor.labelColor;
+    NSString *cacheKey = [NSString stringWithFormat:@"%p_%lu", image, (unsigned long)fill.hash];
+    UIImage *cached = [s_cachedTintedIcons objectForKey:cacheKey];
+    if (cached != nil) return cached;
+
     UIGraphicsImageRendererFormat *format =
         UIGraphicsImageRendererFormat.preferredFormat;
     format.opaque = NO;
@@ -128,7 +139,11 @@ static UIImage *YTKACETintedIcon(UIImage *image, UIColor *color) {
         [fill set];
         UIRectFillUsingBlendMode(bounds, kCGBlendModeSourceIn);
     }];
-    return [tinted imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    UIImage *result = [tinted imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    if (result != nil) {
+        [s_cachedTintedIcons setObject:result forKey:cacheKey];
+    }
+    return result;
 }
 
 static id YTKACEIconImageForStyle(id receiver, SEL selector, long long style) {
@@ -228,11 +243,25 @@ static UIImage *YTKACESquaredIcon(UIImage *image) {
     return [padded imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
+static UIImage *YTKACECachedSquaredIcon(NSString *title) {
+    if (s_cachedSquaredIcons == nil) {
+        s_cachedSquaredIcons = [NSMutableDictionary dictionaryWithCapacity:16];
+    }
+    UIImage *cached = s_cachedSquaredIcons[title ?: @""];
+    if (cached != nil) return cached;
+    UIImage *raw = YTKACENativeSettingsIconImage(title);
+    UIImage *squared = YTKACESquaredIcon(raw);
+    if (squared != nil) {
+        s_cachedSquaredIcons[title ?: @""] = squared;
+    }
+    return squared;
+}
+
 static void YTKACEApplyNativeSettingsIcon(id item, NSString *title) {
     SEL setSettingIcon = NSSelectorFromString(@"setSettingIcon:");
     if (item == nil || ![item respondsToSelector:setSettingIcon]) return;
     Class iconClass = YTKACESettingIconClass();
-    UIImage *image = YTKACESquaredIcon(YTKACENativeSettingsIconImage(title));
+    UIImage *image = YTKACECachedSquaredIcon(title);
     if (iconClass == Nil || image == nil) return;
     id icon = [iconClass new];
     objc_setAssociatedObject(icon, YTKACESettingIconImageKey, image,
@@ -502,11 +531,9 @@ void YTKACEInstallNativeSettingsHooks(void) {
                               &OriginalOrderedGroupCategories);
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        for (NSUInteger attempt = 1; attempt <= 60; attempt++) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
-                (int64_t)(attempt * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                YTKACEInstallNativeSettingsHooks();
-            });
-        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            YTKACEInstallNativeSettingsHooks();
+        });
     });
 }

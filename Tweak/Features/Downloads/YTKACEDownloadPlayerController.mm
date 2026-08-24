@@ -67,44 +67,44 @@ static NSArray<YTKACESubtitleCue *> *YTKACEReadSubtitles(NSURL *mediaURL) {
     if (contents.length == 0) return @[];
     contents = [[contents stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"]
         stringByReplacingOccurrencesOfString:@"\r" withString:@"\n"];
-    NSRegularExpression *blankLines = [NSRegularExpression
-        regularExpressionWithPattern:@"\\n[ \\t]*\\n" options:0 error:nil];
-    contents = [blankLines stringByReplacingMatchesInString:contents options:0
-        range:NSMakeRange(0, contents.length) withTemplate:@"\n\n"];
+
+    NSArray<NSString *> *allLines = [contents componentsSeparatedByString:@"\n"];
     NSMutableArray<YTKACESubtitleCue *> *cues = [NSMutableArray array];
-    for (NSString *block in [contents componentsSeparatedByString:@"\n\n"]) {
-        NSArray<NSString *> *lines = [block componentsSeparatedByString:@"\n"];
-        NSUInteger timingIndex = NSNotFound;
-        for (NSUInteger index = 0; index < lines.count; index++) {
-            if ([lines[index] containsString:@"-->"]) {
-                timingIndex = index;
-                break;
+    NSUInteger i = 0;
+    while (i < allLines.count) {
+        NSString *line = [allLines[i] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if ([line containsString:@"-->"]) {
+            NSArray<NSString *> *times = [line componentsSeparatedByString:@"-->"];
+            if (times.count == 2) {
+                NSString *startStr = [times[0] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+                NSString *endStr = [times[1] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+                // Strip potential cue settings on VTT end timestamp
+                NSRange spaceRange = [endStr rangeOfCharacterFromSet:NSCharacterSet.whitespaceCharacterSet];
+                if (spaceRange.location != NSNotFound) {
+                    endStr = [endStr substringToIndex:spaceRange.location];
+                }
+                NSTimeInterval start = YTKACESubtitleTime(startStr);
+                NSTimeInterval end = YTKACESubtitleTime(endStr);
+
+                NSMutableArray<NSString *> *textLines = [NSMutableArray array];
+                i++;
+                while (i < allLines.count) {
+                    NSString *tLine = [allLines[i] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+                    if (tLine.length == 0) break;
+                    [textLines addObject:tLine];
+                    i++;
+                }
+
+                if (end > start && textLines.count > 0) {
+                    YTKACESubtitleCue *cue = [YTKACESubtitleCue new];
+                    cue.start = start;
+                    cue.end = end;
+                    cue.text = [textLines componentsJoinedByString:@"\n"];
+                    [cues addObject:cue];
+                }
             }
         }
-        if (timingIndex == NSNotFound) continue;
-        NSArray<NSString *> *times = [lines[timingIndex] componentsSeparatedByString:@"-->"];
-        if (times.count != 2) continue;
-        NSArray<NSString *> *endParts = [times[1]
-            componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
-        NSString *endValue = nil;
-        for (NSString *part in endParts) {
-            if (part.length != 0) {
-                endValue = part;
-                break;
-            }
-        }
-        NSMutableArray<NSString *> *textLines = [NSMutableArray array];
-        for (NSUInteger index = timingIndex + 1; index < lines.count; index++) {
-            NSString *line = [lines[index] stringByTrimmingCharactersInSet:
-                NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            if (line.length != 0) [textLines addObject:line];
-        }
-        if (endValue.length == 0 || textLines.count == 0) continue;
-        YTKACESubtitleCue *cue = [YTKACESubtitleCue new];
-        cue.start = YTKACESubtitleTime(times[0]);
-        cue.end = YTKACESubtitleTime(endValue);
-        cue.text = [textLines componentsJoinedByString:@"\n"];
-        if (cue.end > cue.start) [cues addObject:cue];
+        i++;
     }
     return cues;
 }
@@ -185,7 +185,6 @@ static NSString *YTKACELegacyResumeIdentifier(NSURL *URL) {
 static void YTKACEWriteResumeTable(NSUserDefaults *defaults,
                                    NSDictionary *table) {
     [defaults setObject:table forKey:YTKACEResumeKey];
-    [defaults synchronize];
 }
 
 static NSDictionary *YTKACEValidatedResumeRecord(NSURL *URL,

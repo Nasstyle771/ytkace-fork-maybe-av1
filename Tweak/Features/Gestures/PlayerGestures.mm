@@ -49,9 +49,43 @@ static const void *YTKACESeekLabelAssociation = &YTKACESeekLabelAssociation;
 @property(nonatomic, weak) UIView *seekView;
 @property(nonatomic, assign) double seekTime;
 @property(nonatomic, assign) NSInteger seekDirection;
+@property(nonatomic, assign) NSInteger cachedHUDSize;
+@property(nonatomic, assign) NSInteger cachedHUDPosition;
+@property(nonatomic, assign) BOOL isSeekIndicatorVisible;
 - (void)handleEdgePan:(UIPanGestureRecognizer *)recognizer;
 - (void)handleHold:(UILongPressGestureRecognizer *)recognizer;
 @end
+
+static UIImage *s_volumeMuteImage = nil;
+static UIImage *s_volumeLowImage = nil;
+static UIImage *s_volumeMedImage = nil;
+static UIImage *s_volumeHighImage = nil;
+static UIImage *s_sunLowImage = nil;
+static UIImage *s_sunHighImage = nil;
+static UIImage *s_seekBackImage = nil;
+static UIImage *s_seekFwdImage = nil;
+static dispatch_once_t s_gestureImagesOnceToken;
+
+static void YTKACEInitGestureImages(void) {
+    dispatch_once(&s_gestureImagesOnceToken, ^{
+        s_volumeMuteImage = [[UIImage systemImageNamed:@"speaker.slash.fill"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        s_volumeLowImage = [[UIImage systemImageNamed:@"speaker.1.fill"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        s_volumeMedImage = [[UIImage systemImageNamed:@"speaker.2.fill"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        s_volumeHighImage = [[UIImage systemImageNamed:@"speaker.3.fill"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        s_sunLowImage = [[UIImage systemImageNamed:@"sun.min.fill"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        s_sunHighImage = [[UIImage systemImageNamed:@"sun.max.fill"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        s_seekBackImage = [[UIImage systemImageNamed:@"gobackward"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        s_seekFwdImage = [[UIImage systemImageNamed:@"goforward"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    });
+}
 
 @implementation YTKACEGestureCoordinator
 
@@ -60,6 +94,7 @@ static const void *YTKACESeekLabelAssociation = &YTKACESeekLabelAssociation;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         coordinator = [YTKACEGestureCoordinator new];
+        YTKACEInitGestureImages();
     });
     return coordinator;
 }
@@ -274,16 +309,14 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
 }
 
 - (void)layoutIndicator:(UIView *)indicator inView:(UIView *)view {
-    NSInteger size = [YTKACEPreferenceObject(
-        @"YTKACE.Preference.Gestures.HUDSize") integerValue];
+    NSInteger size = self.cachedHUDSize;
     CGSize dimensions = CGSizeMake(200.0, 50.0);
     if (size == 0) dimensions = CGSizeMake(164.0, 44.0);
     if (size == 2) dimensions = CGSizeMake(236.0, 58.0);
     indicator.bounds = (CGRect){CGPointZero, dimensions};
 
     UIEdgeInsets safe = view.safeAreaInsets;
-    NSInteger position = [YTKACEPreferenceObject(
-        @"YTKACE.Preference.Gestures.HUDPosition") integerValue];
+    NSInteger position = self.cachedHUDPosition;
     CGFloat centerY = safe.top + dimensions.height * 0.5 + 18.0;
     if (position == 1) {
         centerY = CGRectGetMidY(view.bounds);
@@ -310,7 +343,6 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
     fillFrame.size.height = 3.0;
     fill.frame = fillFrame;
     label.frame = CGRectMake(trackX, 25.0 * scale, trackWidth, 20.0 * scale);
-    label.font = [UIFont systemFontOfSize:12.0 * scale weight:UIFontWeightMedium];
 }
 
 - (void)updateIndicatorInView:(UIView *)view value:(double)value volume:(BOOL)volume {
@@ -319,24 +351,22 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
     UIImageView *icon = objc_getAssociatedObject(view, YTKACEIndicatorIconAssociation);
     UIView *fill = objc_getAssociatedObject(view, YTKACEIndicatorFillAssociation);
     UILabel *label = objc_getAssociatedObject(view, YTKACEIndicatorLabelAssociation);
-    NSString *symbol = nil;
+    UIImage *symbolImage = nil;
     if (volume) {
-        if (value <= 0.01) symbol = @"speaker.slash.fill";
-        else if (value <= 0.33) symbol = @"speaker.1.fill";
-        else if (value <= 0.66) symbol = @"speaker.2.fill";
-        else symbol = @"speaker.3.fill";
+        if (value <= 0.01) symbolImage = s_volumeMuteImage;
+        else if (value <= 0.33) symbolImage = s_volumeLowImage;
+        else if (value <= 0.66) symbolImage = s_volumeMedImage;
+        else symbolImage = s_volumeHighImage;
     } else {
-        symbol = value <= 0.4 ? @"sun.min.fill" : @"sun.max.fill";
+        symbolImage = value <= 0.4 ? s_sunLowImage : s_sunHighImage;
     }
-    icon.image = [[UIImage systemImageNamed:symbol]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    icon.image = symbolImage;
     [self layoutIndicator:indicator inView:view];
     CGRect frame = fill.frame;
     frame.size.width = (indicator.bounds.size.width - frame.origin.x -
                         20.0 * (indicator.bounds.size.height / 50.0)) * value;
     fill.frame = frame;
     label.text = [NSString stringWithFormat:@"%d%%", (int)lround(value * 100.0)];
-    [view bringSubviewToFront:indicator];
 }
 
 - (void)handleEdgePan:(UIPanGestureRecognizer *)recognizer {
@@ -346,6 +376,8 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
     BOOL volume = action == 2;
     BOOL both = action == 3;
     if (recognizer.state == UIGestureRecognizerStateBegan) {
+        self.cachedHUDSize = [YTKACEPreferenceObject(@"YTKACE.Preference.Gestures.HUDSize") integerValue];
+        self.cachedHUDPosition = [YTKACEPreferenceObject(@"YTKACE.Preference.Gestures.HUDPosition") integerValue];
         double start = volume
             ? AVAudioSession.sharedInstance.outputVolume
             : UIScreen.mainScreen.brightness;
@@ -362,6 +394,7 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
         if (YTKACEFeatureEnabled(@"YTKACE.Preference.Gestures.HUDEnabled")) {
             [self updateIndicatorInView:view value:start volume:volume];
             UIView *indicator = [self indicatorInView:view];
+            [view bringSubviewToFront:indicator];
             [UIView animateWithDuration:0.15 animations:^{ indicator.alpha = 1.0; }];
         }
     }
@@ -482,16 +515,17 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
     UIView *indicator = [self seekIndicatorInView:self.seekView];
     UIImageView *icon = objc_getAssociatedObject(self.seekView, YTKACESeekIconAssociation);
     UILabel *label = objc_getAssociatedObject(self.seekView, YTKACESeekLabelAssociation);
-    NSString *symbol = self.seekDirection < 0 ? @"gobackward" : @"goforward";
-    icon.image = [[UIImage systemImageNamed:symbol]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    icon.image = self.seekDirection < 0 ? s_seekBackImage : s_seekFwdImage;
     NSInteger seconds = MAX(0, (NSInteger)llround(self.seekTime));
     label.text = [NSString stringWithFormat:@"%ld:%02ld",
                   (long)(seconds / 60), (long)(seconds % 60)];
-    indicator.center = CGPointMake(CGRectGetMidX(self.seekView.bounds),
-                                   CGRectGetMidY(self.seekView.bounds));
-    [self.seekView bringSubviewToFront:indicator];
-    [UIView animateWithDuration:0.2 animations:^{ indicator.alpha = 1.0; }];
+    if (!self.isSeekIndicatorVisible) {
+        indicator.center = CGPointMake(CGRectGetMidX(self.seekView.bounds),
+                                       CGRectGetMidY(self.seekView.bounds));
+        [self.seekView bringSubviewToFront:indicator];
+        self.isSeekIndicatorVisible = YES;
+        [UIView animateWithDuration:0.15 animations:^{ indicator.alpha = 1.0; }];
+    }
 }
 
 - (void)handleHold:(UILongPressGestureRecognizer *)recognizer {
@@ -503,6 +537,7 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
         }
         YTKACEHapticImpact(UIImpactFeedbackStyleMedium);
         self.seekView = view;
+        self.isSeekIndicatorVisible = NO;
         CGPoint location = [recognizer locationInView:view];
         self.seekDirection =
             location.x < CGRectGetMidX(view.bounds) ? -1 : 1;
@@ -525,6 +560,7 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
                recognizer.state == UIGestureRecognizerStateFailed) {
         [self.seekTimer invalidate];
         self.seekTimer = nil;
+        self.isSeekIndicatorVisible = NO;
         UIView *indicator = [self seekIndicatorInView:self.seekView];
         [UIView animateWithDuration:0.3
                               delay:0.5

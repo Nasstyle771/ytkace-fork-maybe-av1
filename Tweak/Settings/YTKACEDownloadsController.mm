@@ -160,6 +160,12 @@ static UIAlertAction *YTKACEMenuAction(
     [self.cardView addSubview:self.durationLabel];
     [self.cardView addSubview:self.nameLabel];
     [self.cardView addSubview:self.metadataLabel];
+
+    UILongPressGestureRecognizer *press =
+        [[UILongPressGestureRecognizer alloc] initWithTarget:nil action:NULL];
+    press.minimumPressDuration = 0.25;
+    [self addGestureRecognizer:press];
+
     [self applyTheme];
     return self;
 }
@@ -931,19 +937,13 @@ minimumInteritemSpacingForSectionAtIndex:(NSInteger)section {
     cell.resolutionLabel.text = YTKACELocalized(@"Video");
     cell.durationLabel.text = YTKACELocalized(@"--:--");
     [cell applyTheme];
-    BOOL hasLongPress = NO;
+
     for (UIGestureRecognizer *recognizer in cell.gestureRecognizers) {
         if ([recognizer isKindOfClass:UILongPressGestureRecognizer.class]) {
-            hasLongPress = YES;
+            [recognizer removeTarget:nil action:NULL];
+            [recognizer addTarget:self action:@selector(cellHeld:)];
             break;
         }
-    }
-    if (!hasLongPress) {
-        UILongPressGestureRecognizer *press =
-            [[UILongPressGestureRecognizer alloc] initWithTarget:self
-                                                         action:@selector(cellHeld:)];
-        press.minimumPressDuration = 0.25;
-        [cell addGestureRecognizer:press];
     }
     [cell setNeedsLayout];
     [self loadMetadataForURL:url cell:cell size:size.longLongValue];

@@ -87,13 +87,18 @@
     NSArray<NSString *> *selectors = @[
         @"startPictureInPicture",
         @"activatePictureInPicture",
-        @"startPiP"
+        @"startPiP",
+        @"didPressPiP:"
     ];
     while (responder != nil) {
         for (NSString *name in selectors) {
             SEL selector = NSSelectorFromString(name);
             if ([responder respondsToSelector:selector]) {
-                ((void (*)(id, SEL))objc_msgSend)(responder, selector);
+                if ([name hasSuffix:@":"]) {
+                    ((void (*)(id, SEL, id))objc_msgSend)(responder, selector, self.overlay);
+                } else {
+                    ((void (*)(id, SEL))objc_msgSend)(responder, selector);
+                }
                 return YES;
             }
         }
@@ -258,6 +263,25 @@
         [self showError:@"PiP is not supported on this device."];
         return;
     }
+
+    // Attempt fast native PiP activation first
+    if ([self askResponderForPiP]) {
+        return;
+    }
+
+    AVPlayerLayer *activeLayer = [self activePlayerLayer];
+    if (activeLayer != nil && activeLayer.player != nil) {
+        if (self.controller == nil || self.controller.playerLayer != activeLayer) {
+            self.controller = [[AVPictureInPictureController alloc]
+                initWithPlayerLayer:activeLayer];
+            self.controller.delegate = self;
+        }
+        if (self.controller.isPictureInPicturePossible) {
+            [self.controller startPictureInPicture];
+            return;
+        }
+    }
+
     [self showLoading];
     [self resumeYouTubePlayer];
     [self clearPlayer];
@@ -268,6 +292,7 @@
     if (option != nil) {
         [self pauseYouTubePlayer];
         self.playerItem = [AVPlayerItem playerItemWithURL:option.URL];
+        self.playerItem.preferredForwardBufferDuration = 60.0;
         self.player = [AVPlayer playerWithPlayerItem:self.playerItem];
         self.player.volume = 0.0;
         self.player.allowsExternalPlayback = YES;
@@ -279,9 +304,14 @@
         self.playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
         [self.playerView.layer addSublayer:self.playerLayer];
         [[self keyWindow] addSubview:self.playerView];
+        
         AVAudioSession *session = AVAudioSession.sharedInstance;
-        [session setCategory:AVAudioSessionCategoryPlayback error:nil];
+        [session setCategory:AVAudioSessionCategoryPlayback
+                        mode:AVAudioSessionModeMoviePlayback
+                     options:AVAudioSessionCategoryOptionAllowAirPlay
+                       error:nil];
         [session setActive:YES error:nil];
+        
         self.controller = [[AVPictureInPictureController alloc]
             initWithPlayerLayer:self.playerLayer];
         self.controller.delegate = self;
@@ -298,15 +328,14 @@
                      toleranceAfter:kCMTimeZero];
         }
         self.polling = YES;
-        [self startPiPWithAttempts:10];
+        [self startPiPWithAttempts:20 delayMs:100];
     } else {
-        AVPlayerLayer *activeLayer = [self activePlayerLayer];
         if (activeLayer != nil) {
             self.controller = [[AVPictureInPictureController alloc]
                 initWithPlayerLayer:activeLayer];
             self.controller.delegate = self;
             self.polling = YES;
-            [self startPiPWithAttempts:10];
+            [self startPiPWithAttempts:20 delayMs:100];
             return;
         }
         [self showError:@"No playable video stream is available."];
@@ -324,9 +353,12 @@
         return;
     }
     if (self.playerItem.status == AVPlayerItemStatusReadyToPlay) {
-        if (!self.polling) {
-            self.polling = YES;
-            [self startPiPWithAttempts:10];
+        if (self.controller.isPictureInPicturePossible) {
+            self.polling = NO;
+            [self hideLoading];
+            self.player.volume = 1.0;
+            [self.player play];
+            [self.controller startPictureInPicture];
         }
     } else if (self.playerItem.status == AVPlayerItemStatusFailed) {
         NSString *reason = self.playerItem.error.localizedDescription ?: @"Playback failed.";
@@ -336,7 +368,7 @@
     }
 }
 
-- (void)startPiPWithAttempts:(NSInteger)attempts {
+- (void)startPiPWithAttempts:(NSInteger)attempts delayMs:(NSInteger)delayMs {
     if (self.controller.isPictureInPicturePossible) {
         self.polling = NO;
         [self hideLoading];
@@ -352,9 +384,10 @@
         [self resumeYouTubePlayer];
         return;
     }
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayMs * NSEC_PER_MSEC)),
                    dispatch_get_main_queue(), ^{
-        [self startPiPWithAttempts:attempts - 1];
+        [weakSelf startPiPWithAttempts:attempts - 1 delayMs:delayMs];
     });
 }
 
