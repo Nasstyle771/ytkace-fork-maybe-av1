@@ -12,6 +12,8 @@ static IMP OriginalHAMBackgroundPlaybackAllowed;
 static IMP OriginalHAMItemPlayableInBackground;
 
 static BOOL YTKACEAlwaysTrue(id receiver, SEL selector) {
+    (void)receiver;
+    (void)selector;
     if (YTKACEFeatureEnabled(YTKACEBackgroundPlaybackKey)) {
         return YES;
     }

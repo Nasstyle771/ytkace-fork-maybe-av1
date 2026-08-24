@@ -384,7 +384,7 @@
         [self resumeYouTubePlayer];
         return;
     }
-    __weak typeof(self) weakSelf = self;
+    __weak __typeof__(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayMs * NSEC_PER_MSEC)),
                    dispatch_get_main_queue(), ^{
         [weakSelf startPiPWithAttempts:attempts - 1 delayMs:delayMs];
