@@ -355,7 +355,6 @@ void YTKACEInstallOLEDHooks(void) {
                         object:nil
                          queue:NSOperationQueue.mainQueue
                     usingBlock:^(__unused NSNotification *notification) {
-            [s_dynamicColorCache removeAllObjects];
             for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
                 if (![scene isKindOfClass:UIWindowScene.class]) continue;
                 for (UIWindow *window in ((UIWindowScene *)scene).windows) {
