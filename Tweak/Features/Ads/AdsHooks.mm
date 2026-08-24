@@ -38,6 +38,9 @@ static IMP OriginalSectionListContentsArray;
 static IMP OriginalItemSectionContentsArray;
 static IMP OriginalDisplayViewSetAccessibilityIdentifier;
 static IMP OriginalHasAdLoggingData;
+static IMP OriginalElementRendererElementData;
+static IMP OriginalSectionListLoadWithModel;
+static IMP OriginalIsMonetized;
 
 static id YTKACECallObjectGetter(IMP implementation, id receiver, SEL selector) {
     return implementation == NULL
@@ -458,6 +461,73 @@ static BOOL YTKACENoAdLoggingData(id receiver, SEL selector) {
         : YTKACECallBooleanGetter(OriginalHasAdLoggingData, receiver, selector);
 }
 
+static NSData *YTKACEElementRendererElementData(id receiver, SEL selector) {
+    if (YTKACEFeatureEnabled(YTKACENoAdsKey)) {
+        id compat = YTKACEObjectValue(receiver, @"compatibilityOptions");
+        if (compat != nil && YTKACEObjectBool(compat, @"hasAdLoggingData")) {
+            return nil;
+        }
+        if (YTKACEObjectBool(receiver, @"hasAdLoggingData")) {
+            return nil;
+        }
+        NSString *desc = [[receiver description] lowercaseString];
+        static NSArray<NSString *> *s_adKeywords = nil;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            s_adKeywords = @[
+                @"brand_promo", @"product_carousel", @"product_engagement_panel",
+                @"product_item", @"text_search_ad", @"text_image_button_layout",
+                @"carousel_headered_layout", @"carousel_footered_layout",
+                @"square_image_layout", @"landscape_image_wide_button_layout",
+                @"feed_ad_metadata", @"feed_ad", @"sponsored", @"promoted",
+                @"ad_logging_data", @"eml_ad_", @"eml_feed_ad", @"eml_infeed_ad",
+                @"promoted_sparkles", @"promoted_video"
+            ];
+        });
+        for (NSString *keyword in s_adKeywords) {
+            if ([desc containsString:keyword]) {
+                return [NSData data];
+            }
+        }
+    }
+    return OriginalElementRendererElementData == NULL
+        ? nil
+        : ((NSData * (*)(id, SEL))OriginalElementRendererElementData)(receiver, selector);
+}
+
+static void YTKACESectionListLoadWithModel(id receiver, SEL selector, id model) {
+    if (YTKACEFeatureEnabled(YTKACENoAdsKey) && [model respondsToSelector:@selector(contentsArray)]) {
+        NSMutableArray *contents = ((id (*)(id, SEL))objc_msgSend)(model, @selector(contentsArray));
+        if ([contents isKindOfClass:NSMutableArray.class]) {
+            NSIndexSet *removeIndexes = [contents indexesOfObjectsPassingTest:^BOOL(id section, NSUInteger idx, BOOL *stop) {
+                id sectionRenderer = [section respondsToSelector:@selector(itemSectionRenderer)]
+                    ? ((id (*)(id, SEL))objc_msgSend)(section, @selector(itemSectionRenderer))
+                    : section;
+                if ([sectionRenderer respondsToSelector:@selector(contentsArray)]) {
+                    NSArray *items = ((id (*)(id, SEL))objc_msgSend)(sectionRenderer, @selector(contentsArray));
+                    if ([items isKindOfClass:NSArray.class] && items.count > 0) {
+                        id first = items.firstObject;
+                        if (YTKACEItemLooksLikeAd(first)) return YES;
+                    }
+                }
+                return YTKACEItemLooksLikeAd(sectionRenderer);
+            }];
+            if (removeIndexes.count > 0) {
+                [contents removeObjectsAtIndexes:removeIndexes];
+            }
+        }
+    }
+    if (OriginalSectionListLoadWithModel != NULL) {
+        ((void (*)(id, SEL, id))OriginalSectionListLoadWithModel)(receiver, selector, model);
+    }
+}
+
+static BOOL YTKACEIsMonetized(id receiver, SEL selector) {
+    return YTKACEFeatureEnabled(YTKACENoAdsKey)
+        ? NO
+        : YTKACECallBooleanGetter(OriginalIsMonetized, receiver, selector);
+}
+
 
 
 static id YTKACENoCompanionAd(id receiver, SEL selector) {
@@ -636,6 +706,18 @@ void YTKACEInstallAdsHooks(void) {
                               @"hasShoppingCompanionAdRenderer",
                               (IMP)YTKACEHasShoppingCompanionAdRenderer,
                               &OriginalHasShoppingCompanionAdRenderer);
+    YTKACEInstallInstanceHook(@"YTIElementRenderer",
+                              @"elementData",
+                              (IMP)YTKACEElementRendererElementData,
+                              &OriginalElementRendererElementData);
+    YTKACEInstallInstanceHook(@"YTSectionListViewController",
+                              @"loadWithModel:",
+                              (IMP)YTKACESectionListLoadWithModel,
+                              &OriginalSectionListLoadWithModel);
+    YTKACEInstallInstanceHook(@"YTIPlayerResponse",
+                              @"isMonetized",
+                              (IMP)YTKACEIsMonetized,
+                              &OriginalIsMonetized);
     YTKACEInstallInstanceHook(@"YTISectionListRenderer",
                               @"contentsArray",
                               (IMP)YTKACESectionListContentsArray,
