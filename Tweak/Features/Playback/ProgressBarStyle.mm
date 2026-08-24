@@ -315,9 +315,6 @@ static IMP OriginalDrawRectDecorationProgress;
 static IMP OriginalDrawRectDecoration;
 static IMP OriginalSegmentedLayout;
 
-static UIImage *YTKACEThumbBarImage(CGFloat width, CGFloat height,
-                                    CGFloat trackWidth);
-
 static BOOL YTKACEColorIsYouTubeRed(CGColorRef color) {
     if (color == NULL) return NO;
     const CGFloat *components = CGColorGetComponents(color);
@@ -333,14 +330,16 @@ static void YTKACEApplyLayerFill(CALayer *layer, UIColor *colour,
         layer.backgroundColor = reference;
         return;
     }
-    CGFloat track = CGRectGetWidth(layer.superlayer.bounds);
-    if (track < width) track = width;
-    UIImage *fill = YTKACEThumbBarImage(width, height, track);
-    layer.backgroundColor = YTKACEMainColor().CGColor;
-    if (fill.CGImage != NULL) {
-        layer.contents = (__bridge id)fill.CGImage;
-        layer.contentsScale = fill.scale;
-        layer.contentsGravity = kCAGravityResize;
+    if (YTKACEProgressStyle() == 2) {
+        UIImage *fill = YTKACEGradientStrip(MAX(width, 1.0), MAX(height, 1.0));
+        layer.backgroundColor = YTKACEMainColor().CGColor;
+        if (fill.CGImage != NULL) {
+            layer.contents = (__bridge id)fill.CGImage;
+            layer.contentsScale = fill.scale;
+            layer.contentsGravity = kCAGravityResize;
+        }
+    } else {
+        layer.backgroundColor = YTKACEMainColor().CGColor;
     }
 }
 
