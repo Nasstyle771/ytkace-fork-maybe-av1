@@ -131,8 +131,9 @@ static BOOL YTKACEMutedIsPlaybackAllowed(id receiver, SEL selector) {
 
 static void YTKACESetLayerFrameRateRange(CALayer *layer, CAFrameRateRange range) {
     if (layer == nil) return;
-    if (@available(iOS 15.0, *)) {
-        layer.preferredFrameRateRange = range;
+    static SEL setRangeSel = NSSelectorFromString(@"setPreferredFrameRateRange:");
+    if ([layer respondsToSelector:setRangeSel]) {
+        ((void (*)(id, SEL, CAFrameRateRange))objc_msgSend)(layer, setRangeSel, range);
     }
 }
 
