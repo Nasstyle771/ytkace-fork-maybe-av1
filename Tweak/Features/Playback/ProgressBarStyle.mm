@@ -500,9 +500,9 @@ void YTKACEStyleProgressLayer(CALayer *layer, CGFloat trackWidth) {
     CGFloat width = CGRectGetWidth(layer.bounds);
     CGFloat height = CGRectGetHeight(layer.bounds);
     if (width < 1.0 || height < 1.0) return;
-    if (trackWidth < width) trackWidth = width;
+    (void)trackWidth;
     if (YTKACEProgressStyle() == 2) {
-        UIImage *fill = YTKACEThumbBarImage(width, height, trackWidth);
+        UIImage *fill = YTKACEGradientStrip(MAX(width, 1.0), MAX(height, 1.0));
         layer.backgroundColor = YTKACEMainColor().CGColor;
         if (fill.CGImage != NULL) {
             layer.contents = (__bridge id)fill.CGImage;
