@@ -42,31 +42,26 @@ static IMP OriginalActionsViewDidMove;
 static IMP OriginalActionCellDidMove;
 static IMP OriginalCreateActionViews;
 static const void *YTKACEContentHiddenAssociation = &YTKACEContentHiddenAssociation;
-static NSString *YTKACENormalizedDescription(id object);
-static const void *YTKACEActionGroupCompactAssociation =
-    &YTKACEActionGroupCompactAssociation;
+static const void *YTKACENormalizedDescriptionAssociation =
+    &YTKACENormalizedDescriptionAssociation;
+
+static NSString *YTKACENormalizedDescription(id object) {
+    if (object == nil) return @"";
+    NSString *cached = objc_getAssociatedObject(
+        object, YTKACENormalizedDescriptionAssociation);
+    if (cached != nil) return cached;
+    NSString *value = [[[object description] lowercaseString]
+        stringByReplacingOccurrencesOfString:@"." withString:@"_"];
+    if (value == nil) value = @"";
+    objc_setAssociatedObject(object, YTKACENormalizedDescriptionAssociation, value,
+                             OBJC_ASSOCIATION_COPY_NONATOMIC);
+    return value;
+}
+
 static BOOL YTKACEContentContains(NSString *token,
                                   NSArray<NSString *> *needles);
 static BOOL YTKACEHideTopics(void);
 static BOOL YTKACEEnsureStructuralActionHook(void);
-
-static BOOL YTKACEViewIsInsideWatchActionBar(UIView *view) {
-    for (UIView *candidate = view; candidate != nil; candidate = candidate.superview) {
-        NSString *identifier = [candidate.accessibilityIdentifier lowercaseString] ?: @"";
-        NSString *className = NSStringFromClass(candidate.class) ?: @"";
-        if ([identifier containsString:@"scrollable_action_bar"] ||
-            [className containsString:@"SlimVideoScrollableDetailsActionsView"] ||
-            [className containsString:@"SlimVideoScrollableActionBarCell"]) {
-            return YES;
-        }
-        if ([candidate isKindOfClass:UICollectionView.class] &&
-            CGRectGetHeight(candidate.bounds) <= 64.0 &&
-            CGRectGetHeight(candidate.bounds) > 0.0) {
-            return YES;
-        }
-    }
-    return NO;
-}
 
 static NSString *YTKACEActionPreference(id item) {
     if (item == nil) return nil;
@@ -115,71 +110,6 @@ static BOOL YTKACEAnyActionPreferenceEnabled(void) {
         if (YTKACEFeatureEnabled(key)) return YES;
     }
     return NO;
-}
-
-static NSString *YTKACEActionPreferenceForView(UIView *view) {
-    if (view == nil || !YTKACEViewIsInsideWatchActionBar(view)) return nil;
-    for (NSString *name in @[@"entry", @"renderer", @"buttonRenderer",
-                             @"model", @"elementRenderer"]) {
-        SEL selector = NSSelectorFromString(name);
-        if (![view respondsToSelector:selector]) continue;
-        id related = ((id (*)(id, SEL))objc_msgSend)(view, selector);
-        if (related == nil || [related isKindOfClass:UIView.class]) continue;
-        NSString *preference = YTKACEActionPreference(related);
-        if (preference.length != 0) {
-            return preference;
-        }
-    }
-    NSString *token = [[[NSString stringWithFormat:@"%s %@",
-        class_getName(view.class), view.accessibilityIdentifier ?: @""]
-        lowercaseString]
-        stringByReplacingOccurrencesOfString:@"." withString:@"_"];
-    NSString *wide = [[NSString stringWithFormat:@"%@ %@", token,
-        view.accessibilityLabel ?: @""] lowercaseString];
-    static NSArray<NSArray<NSString *> *> *s_viewRules = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        s_viewRules = @[
-            @[@"YTKACE.Preference.ActionBar.DislikeHidden", @"id_video_dislike_button", @"dislike"],
-            @[@"YTKACE.Preference.ActionBar.ShareHidden", @"id_video_share_button", @"share"],
-            @[@"YTKACE.Preference.ActionBar.DownloadHidden", @"offline", @"download"],
-            @[@"YTKACE.Preference.ActionBar.SaveHidden", @"save", @"add_to"],
-            @[@"YTKACE.Preference.ActionBar.ClipHidden", @"clip"],
-            @[@"YTKACE.Preference.ActionBar.RemixHidden", @"remix"],
-            @[@"YTKACE.Preference.ActionBar.ThanksHidden", @"thanks"],
-            @[@"YTKACE.Preference.ActionBar.HypeHidden", @"hype"],
-            @[@"YTKACE.Preference.ActionBar.ReportHidden", @"id_player_watch_flag_button", @"report"],
-            @[@"YTKACE.Preference.ActionBar.AskHidden", @"ask", @"gemini"],
-            @[@"YTKACE.Preference.ActionBar.LikeHidden", @"id_video_like_button", @"like"]
-        ];
-    });
-    BOOL dislikeToken = [token containsString:@"dislike"] ||
-        [wide containsString:@"dislike"];
-    for (NSArray<NSString *> *rule in s_viewRules) {
-        if (dislikeToken &&
-            [rule.firstObject isEqualToString:
-                @"YTKACE.Preference.ActionBar.LikeHidden"]) {
-            continue;
-        }
-        for (NSUInteger index = 1; index < rule.count; index++) {
-            if ([token containsString:rule[index]]) {
-                return rule.firstObject;
-            }
-        }
-    }
-    for (NSArray<NSString *> *rule in s_viewRules) {
-        if (dislikeToken &&
-            [rule.firstObject isEqualToString:
-                @"YTKACE.Preference.ActionBar.LikeHidden"]) {
-            continue;
-        }
-        for (NSUInteger index = 1; index < rule.count; index++) {
-            if ([wide containsString:rule[index]]) {
-                return rule.firstObject;
-            }
-        }
-    }
-    return nil;
 }
 
 static void YTKACECreateActionViews(id receiver, SEL selector,
@@ -304,33 +234,7 @@ static id YTKACEContentValue(id object, NSString *key) {
     }
 }
 
-static BOOL YTKACEItemIsShorts(id item) {
-    NSString *description = YTKACENormalizedDescription(item);
-    return YTKACEContentContains(description, @[
-        @"shorts_shelf_eml", @"shorts_shelf", @"reel_shelf",
-        @"shorts_lockup_shelf", @"shortsshelfrenderer", @"reelshelfrenderer",
-        @"shortslockupviewmodel", @"shorts_video_cell", @"reelitemrenderer",
-        @"shortslockup"
-    ]);
-}
 
-static const void *YTKACENormalizedDescriptionAssociation =
-    &YTKACENormalizedDescriptionAssociation;
-static const void *YTKACESectionTokenAssociation = &YTKACESectionTokenAssociation;
-static const NSUInteger YTKACERecursiveDescriptionFloor = 160;
-
-static NSString *YTKACENormalizedDescription(id object) {
-    if (object == nil) return @"";
-    NSString *cached = objc_getAssociatedObject(
-        object, YTKACENormalizedDescriptionAssociation);
-    if (cached != nil) return cached;
-    NSString *value = [[[object description] lowercaseString]
-        stringByReplacingOccurrencesOfString:@"." withString:@"_"];
-    if (value == nil) value = @"";
-    objc_setAssociatedObject(object, YTKACENormalizedDescriptionAssociation, value,
-                             OBJC_ASSOCIATION_COPY_NONATOMIC);
-    return value;
-}
 
 static BOOL YTKACEContentContains(NSString *token,
                                   NSArray<NSString *> *needles) {
