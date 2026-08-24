@@ -133,7 +133,9 @@ static void YTKACEAppTraitChanged(UIViewController *receiver,
 static UIColor *YTKACEAccentColorHook(id receiver, SEL selector) {
     NSInteger preset = [NSUserDefaults.standardUserDefaults integerForKey:YTKACEAccentPresetKey];
     if (preset > 0) {
-        return YTKACEAppAccentColor();
+        return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+            return YTKACEAppAccentColorForTraits(traits);
+        }];
     }
     IMP original = YTKACEOLEDImplementation(
         YTKACEOLEDOriginals[YTKACEOLEDOriginalKey(receiver, selector)]

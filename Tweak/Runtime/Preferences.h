@@ -29,18 +29,23 @@ FOUNDATION_EXPORT void YTKACERegisterDefaults(void);
 FOUNDATION_EXPORT BOOL YTKACEMasterEnabled(void);
 FOUNDATION_EXPORT BOOL YTKACEFeatureEnabled(NSString *key);
 FOUNDATION_EXPORT BOOL YTKACEOLEDActive(UITraitCollection * _Nullable traits);
+FOUNDATION_EXPORT BOOL YTKACEIsLightMode(UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEInterfaceBackgroundColor(
     UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEInterfaceSurfaceColor(
     UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEThemeTopColor(void);
+FOUNDATION_EXPORT UIColor *YTKACEThemeTopColorForTraits(UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEThemeBottomColor(void);
+FOUNDATION_EXPORT UIColor *YTKACEThemeBottomColorForTraits(UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEThemeBackgroundColor(
     UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEThemeSurfaceColor(
     UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIImage * _Nullable YTKACEThemeGradientImage(CGSize size);
+FOUNDATION_EXPORT UIImage * _Nullable YTKACEThemeGradientImageForTraits(CGSize size, UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEAppAccentColor(void);
+FOUNDATION_EXPORT UIColor *YTKACEAppAccentColorForTraits(UITraitCollection * _Nullable traits);
 FOUNDATION_EXPORT UIColor *YTKACEColorFromHex(NSString *hex, UIColor * _Nullable fallback);
 FOUNDATION_EXPORT BOOL YTKACESponsorBlockEnabled(void);
 FOUNDATION_EXPORT void YTKACESetPreference(NSString *key, BOOL enabled);

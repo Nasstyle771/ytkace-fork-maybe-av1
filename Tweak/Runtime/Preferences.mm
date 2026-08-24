@@ -239,14 +239,21 @@ BOOL YTKACEFeatureEnabled(NSString *key) {
     return val;
 }
 
+BOOL YTKACEIsLightMode(UITraitCollection *traits) {
+    UIUserInterfaceStyle style = traits ? traits.userInterfaceStyle : UIUserInterfaceStyleUnspecified;
+    if (style == UIUserInterfaceStyleUnspecified) {
+        if (@available(iOS 13.0, *)) {
+            style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+        }
+    }
+    return (style == UIUserInterfaceStyleLight);
+}
+
 BOOL YTKACEOLEDActive(UITraitCollection *traits) {
     BOOL oledEnabled = YTKACEFeatureEnabled(YTKACEOLEDKey);
     id themeVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
     NSInteger themePreset = [themeVal respondsToSelector:@selector(integerValue)] ? [themeVal integerValue] : 0;
     if (!oledEnabled && themePreset == 0) {
-        return NO;
-    }
-    if (traits != nil && traits.userInterfaceStyle == UIUserInterfaceStyleLight && themePreset == 0) {
         return NO;
     }
     return YES;
@@ -267,61 +274,124 @@ UIColor *YTKACEColorFromHex(NSString *hex, UIColor *fallback) {
                            alpha:1.0];
 }
 
-UIColor *YTKACEThemeTopColor(void) {
+static UIColor *YTKACELightenColor(UIColor *color, CGFloat factor) {
+    CGFloat r = 0, g = 0, b = 0, a = 1.0;
+    if ([color getRed:&r green:&g blue:&b alpha:&a]) {
+        return [UIColor colorWithRed:MIN(1.0, r + (1.0 - r) * factor)
+                               green:MIN(1.0, g + (1.0 - g) * factor)
+                                blue:MIN(1.0, b + (1.0 - b) * factor)
+                               alpha:a];
+    }
+    return color;
+}
+
+UIColor *YTKACEThemeTopColorForTraits(UITraitCollection *traits) {
+    BOOL light = YTKACEIsLightMode(traits);
     id presetVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
     NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
-    switch (preset) {
-        case 1: return [UIColor colorWithRed:0.06 green:0.0 blue:0.01 alpha:1.0]; // Midnight Crimson Top
-        case 2: return [UIColor colorWithRed:0.03 green:0.01 blue:0.08 alpha:1.0]; // Cyberpunk Neon Top
-        case 3: return [UIColor colorWithRed:0.0 green:0.05 blue:0.02 alpha:1.0]; // Emerald Abyss Top
-        case 4: return [UIColor colorWithRed:0.08 green:0.02 blue:0.0 alpha:1.0]; // Sunset Ember Top
-        case 5: return [UIColor colorWithRed:0.05 green:0.0 blue:0.09 alpha:1.0]; // Nebula Violet Top
-        case 6: return [UIColor colorWithRed:0.0 green:0.03 blue:0.09 alpha:1.0]; // Deep Ocean Blue Top
-        case 7: {
-            NSString *hex = YTKACEPreferenceObject(YTKACEThemeTopHexKey);
-            return YTKACEColorFromHex(hex, UIColor.blackColor);
+    if (light) {
+        switch (preset) {
+            case 1: return [UIColor colorWithRed:1.000 green:0.961 blue:0.969 alpha:1.0]; // Sakura Crimson Rose Top
+            case 2: return [UIColor colorWithRed:0.980 green:0.961 blue:1.000 alpha:1.0]; // Lavender Pastel Top
+            case 3: return [UIColor colorWithRed:0.969 green:0.996 blue:0.910 alpha:1.0]; // Mint Meadow Top
+            case 4: return [UIColor colorWithRed:1.000 green:0.980 blue:0.933 alpha:1.0]; // Peach Sunset Light Orange Top
+            case 5: return [UIColor colorWithRed:0.992 green:0.957 blue:1.000 alpha:1.0]; // Lilac Breeze Top
+            case 6: return [UIColor colorWithRed:0.973 green:0.980 blue:0.988 alpha:1.0]; // Sky Azure Top
+            case 7: {
+                NSString *hex = YTKACEPreferenceObject(YTKACEThemeTopHexKey);
+                UIColor *custom = YTKACEColorFromHex(hex, UIColor.whiteColor);
+                return YTKACELightenColor(custom, 0.85);
+            }
+            default: return [UIColor colorWithWhite:1.0 alpha:1.0]; // Pure Clean White
         }
-        default: return UIColor.blackColor; // OLED Pure Black
+    } else {
+        switch (preset) {
+            case 1: return [UIColor colorWithRed:0.06 green:0.0 blue:0.01 alpha:1.0]; // Midnight Crimson Top
+            case 2: return [UIColor colorWithRed:0.03 green:0.01 blue:0.08 alpha:1.0]; // Cyberpunk Neon Top
+            case 3: return [UIColor colorWithRed:0.0 green:0.05 blue:0.02 alpha:1.0]; // Emerald Abyss Top
+            case 4: return [UIColor colorWithRed:0.08 green:0.02 blue:0.0 alpha:1.0]; // Sunset Ember Top
+            case 5: return [UIColor colorWithRed:0.05 green:0.0 blue:0.09 alpha:1.0]; // Nebula Violet Top
+            case 6: return [UIColor colorWithRed:0.0 green:0.03 blue:0.09 alpha:1.0]; // Deep Ocean Blue Top
+            case 7: {
+                NSString *hex = YTKACEPreferenceObject(YTKACEThemeTopHexKey);
+                return YTKACEColorFromHex(hex, UIColor.blackColor);
+            }
+            default: return UIColor.blackColor; // OLED Pure Black
+        }
+    }
+}
+
+UIColor *YTKACEThemeTopColor(void) {
+    return YTKACEThemeTopColorForTraits(nil);
+}
+
+UIColor *YTKACEThemeBottomColorForTraits(UITraitCollection *traits) {
+    BOOL light = YTKACEIsLightMode(traits);
+    id presetVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
+    NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
+    if (light) {
+        switch (preset) {
+            case 1: return [UIColor colorWithRed:1.000 green:0.898 blue:0.925 alpha:1.0]; // Velvet Blush Bottom
+            case 2: return [UIColor colorWithRed:0.914 green:0.835 blue:1.000 alpha:1.0]; // Electric Lavender Bottom
+            case 3: return [UIColor colorWithRed:0.863 green:0.988 blue:0.906 alpha:1.0]; // Forest Sage Bottom
+            case 4: return [UIColor colorWithRed:1.000 green:0.910 blue:0.800 alpha:1.0]; // Peach Sunset Warm Apricot Bottom
+            case 5: return [UIColor colorWithRed:0.941 green:0.840 blue:0.990 alpha:1.0]; // Lilac Glow Bottom
+            case 6: return [UIColor colorWithRed:0.750 green:0.900 blue:0.990 alpha:1.0]; // Azure Cloud Bottom
+            case 7: {
+                NSString *hex = YTKACEPreferenceObject(YTKACEThemeBottomHexKey);
+                UIColor *custom = YTKACEColorFromHex(hex, [UIColor colorWithRed:1.0 green:0.910 blue:0.800 alpha:1.0]);
+                return YTKACELightenColor(custom, 0.70);
+            }
+            default: return [UIColor colorWithRed:0.965 green:0.969 blue:0.976 alpha:1.0]; // Pure Clean White Bottom
+        }
+    } else {
+        switch (preset) {
+            case 1: return [UIColor colorWithRed:0.23 green:0.01 blue:0.04 alpha:1.0]; // Velvet Crimson
+            case 2: return [UIColor colorWithRed:0.19 green:0.03 blue:0.33 alpha:1.0]; // Electric Purple
+            case 3: return [UIColor colorWithRed:0.01 green:0.23 blue:0.11 alpha:1.0]; // Forest Emerald
+            case 4: return [UIColor colorWithRed:0.25 green:0.07 blue:0.01 alpha:1.0]; // Sunset Amber
+            case 5: return [UIColor colorWithRed:0.22 green:0.03 blue:0.37 alpha:1.0]; // Nebula Violet
+            case 6: return [UIColor colorWithRed:0.02 green:0.16 blue:0.37 alpha:1.0]; // Abyss Navy
+            case 7: {
+                NSString *hex = YTKACEPreferenceObject(YTKACEThemeBottomHexKey);
+                return YTKACEColorFromHex(hex, [UIColor colorWithRed:0.23 green:0.01 blue:0.04 alpha:1.0]);
+            }
+            default: return UIColor.blackColor; // OLED Pure Black
+        }
     }
 }
 
 UIColor *YTKACEThemeBottomColor(void) {
-    id presetVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
-    NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
-    switch (preset) {
-        case 1: return [UIColor colorWithRed:0.23 green:0.01 blue:0.04 alpha:1.0]; // Velvet Crimson
-        case 2: return [UIColor colorWithRed:0.19 green:0.03 blue:0.33 alpha:1.0]; // Electric Purple
-        case 3: return [UIColor colorWithRed:0.01 green:0.23 blue:0.11 alpha:1.0]; // Forest Emerald
-        case 4: return [UIColor colorWithRed:0.25 green:0.07 blue:0.01 alpha:1.0]; // Sunset Amber
-        case 5: return [UIColor colorWithRed:0.22 green:0.03 blue:0.37 alpha:1.0]; // Nebula Violet
-        case 6: return [UIColor colorWithRed:0.02 green:0.16 blue:0.37 alpha:1.0]; // Abyss Navy
-        case 7: {
-            NSString *hex = YTKACEPreferenceObject(YTKACEThemeBottomHexKey);
-            return YTKACEColorFromHex(hex, [UIColor colorWithRed:0.23 green:0.01 blue:0.04 alpha:1.0]);
-        }
-        default: return UIColor.blackColor; // OLED Pure Black
-    }
+    return YTKACEThemeBottomColorForTraits(nil);
 }
 
-static UIColor *s_cachedBgColors[8] = {nil};
-static UIColor *s_cachedSurfaceColors[8] = {nil};
-static UIColor *s_cachedAccentColor = nil;
+static UIColor *s_cachedDarkBgColors[8] = {nil};
+static UIColor *s_cachedLightBgColors[8] = {nil};
+static UIColor *s_cachedDarkSurfaceColors[8] = {nil};
+static UIColor *s_cachedLightSurfaceColors[8] = {nil};
+static UIColor *s_cachedDarkAccentColor = nil;
+static UIColor *s_cachedLightAccentColor = nil;
 static UIImage *s_cachedGradientImage = nil;
 static CGSize s_cachedGradientSize = CGSizeZero;
 static NSInteger s_cachedGradientPreset = -1;
+static BOOL s_cachedGradientIsLight = NO;
 static NSString *s_cachedTopHex = nil;
 static NSString *s_cachedBottomHex = nil;
 
 void YTKACEClearThemeColorCache(void) {
     os_unfair_lock_lock(&s_themeLock);
     for (int i = 0; i < 8; i++) {
-        s_cachedBgColors[i] = nil;
-        s_cachedSurfaceColors[i] = nil;
+        s_cachedDarkBgColors[i] = nil;
+        s_cachedLightBgColors[i] = nil;
+        s_cachedDarkSurfaceColors[i] = nil;
+        s_cachedLightSurfaceColors[i] = nil;
     }
-    s_cachedAccentColor = nil;
+    s_cachedDarkAccentColor = nil;
+    s_cachedLightAccentColor = nil;
     s_cachedGradientImage = nil;
     s_cachedGradientSize = CGSizeZero;
     s_cachedGradientPreset = -1;
+    s_cachedGradientIsLight = NO;
     s_cachedTopHex = nil;
     s_cachedBottomHex = nil;
     os_unfair_lock_unlock(&s_themeLock);
@@ -331,41 +401,72 @@ UIColor *YTKACEThemeBackgroundColor(UITraitCollection *traits) {
     if (!YTKACEOLEDActive(traits)) {
         return YTKACEInterfaceBackgroundColor(traits);
     }
+    BOOL light = YTKACEIsLightMode(traits);
     id presetVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
     NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
     
     os_unfair_lock_lock(&s_themeLock);
-    if (preset >= 0 && preset < 8 && s_cachedBgColors[preset] != nil) {
-        UIColor *res = s_cachedBgColors[preset];
-        os_unfair_lock_unlock(&s_themeLock);
-        return res;
+    if (preset >= 0 && preset < 8) {
+        UIColor *res = light ? s_cachedLightBgColors[preset] : s_cachedDarkBgColors[preset];
+        if (res != nil) {
+            os_unfair_lock_unlock(&s_themeLock);
+            return res;
+        }
     }
     os_unfair_lock_unlock(&s_themeLock);
 
     UIColor *color = nil;
-    switch (preset) {
-        case 1: color = [UIColor colorWithRed:0.09 green:0.005 blue:0.02 alpha:1.0]; break;
-        case 2: color = [UIColor colorWithRed:0.07 green:0.02 blue:0.14 alpha:1.0]; break;
-        case 3: color = [UIColor colorWithRed:0.005 green:0.09 blue:0.04 alpha:1.0]; break;
-        case 4: color = [UIColor colorWithRed:0.11 green:0.03 blue:0.01 alpha:1.0]; break;
-        case 5: color = [UIColor colorWithRed:0.08 green:0.01 blue:0.15 alpha:1.0]; break;
-        case 6: color = [UIColor colorWithRed:0.01 green:0.06 blue:0.17 alpha:1.0]; break;
-        case 7: {
-            UIColor *top = YTKACEThemeTopColor();
-            UIColor *bottom = YTKACEThemeBottomColor();
-            CGFloat r1, g1, b1, a1, r2, g2, b2, a2;
-            if ([top getRed:&r1 green:&g1 blue:&b1 alpha:&a1] && [bottom getRed:&r2 green:&g2 blue:&b2 alpha:&a2]) {
-                color = [UIColor colorWithRed:(r1 + r2) * 0.5 green:(g1 + g2) * 0.5 blue:(b1 + b2) * 0.5 alpha:1.0];
-            } else {
-                color = UIColor.blackColor;
+    if (light) {
+        switch (preset) {
+            case 1: color = [UIColor colorWithRed:1.000 green:0.941 blue:0.953 alpha:1.0]; break; // Sakura Rose Bg
+            case 2: color = [UIColor colorWithRed:0.961 green:0.933 blue:0.992 alpha:1.0]; break; // Lavender Pastel Bg
+            case 3: color = [UIColor colorWithRed:0.941 green:0.992 blue:0.957 alpha:1.0]; break; // Mint Meadow Bg
+            case 4: color = [UIColor colorWithRed:1.000 green:0.969 blue:0.925 alpha:1.0]; break; // Peach Sunset Light Orange Bg!
+            case 5: color = [UIColor colorWithRed:0.980 green:0.961 blue:1.000 alpha:1.0]; break; // Lilac Breeze Bg
+            case 6: color = [UIColor colorWithRed:0.941 green:0.976 blue:1.000 alpha:1.0]; break; // Sky Azure Bg
+            case 7: {
+                UIColor *top = YTKACEThemeTopColorForTraits(traits);
+                UIColor *bottom = YTKACEThemeBottomColorForTraits(traits);
+                CGFloat r1, g1, b1, a1, r2, g2, b2, a2;
+                if ([top getRed:&r1 green:&g1 blue:&b1 alpha:&a1] && [bottom getRed:&r2 green:&g2 blue:&b2 alpha:&a2]) {
+                    color = [UIColor colorWithRed:(r1 + r2) * 0.5 green:(g1 + g2) * 0.5 blue:(b1 + b2) * 0.5 alpha:1.0];
+                } else {
+                    color = UIColor.whiteColor;
+                }
+                break;
             }
-            break;
+            default: color = UIColor.whiteColor; break;
         }
-        default: color = UIColor.blackColor; break;
+    } else {
+        switch (preset) {
+            case 1: color = [UIColor colorWithRed:0.09 green:0.005 blue:0.02 alpha:1.0]; break;
+            case 2: color = [UIColor colorWithRed:0.07 green:0.02 blue:0.14 alpha:1.0]; break;
+            case 3: color = [UIColor colorWithRed:0.005 green:0.09 blue:0.04 alpha:1.0]; break;
+            case 4: color = [UIColor colorWithRed:0.11 green:0.03 blue:0.01 alpha:1.0]; break;
+            case 5: color = [UIColor colorWithRed:0.08 green:0.01 blue:0.15 alpha:1.0]; break;
+            case 6: color = [UIColor colorWithRed:0.01 green:0.06 blue:0.17 alpha:1.0]; break;
+            case 7: {
+                UIColor *top = YTKACEThemeTopColorForTraits(traits);
+                UIColor *bottom = YTKACEThemeBottomColorForTraits(traits);
+                CGFloat r1, g1, b1, a1, r2, g2, b2, a2;
+                if ([top getRed:&r1 green:&g1 blue:&b1 alpha:&a1] && [bottom getRed:&r2 green:&g2 blue:&b2 alpha:&a2]) {
+                    color = [UIColor colorWithRed:(r1 + r2) * 0.5 green:(g1 + g2) * 0.5 blue:(b1 + b2) * 0.5 alpha:1.0];
+                } else {
+                    color = UIColor.blackColor;
+                }
+                break;
+            }
+            default: color = UIColor.blackColor; break;
+        }
     }
+
     if (preset >= 0 && preset < 8) {
         os_unfair_lock_lock(&s_themeLock);
-        s_cachedBgColors[preset] = color;
+        if (light) {
+            s_cachedLightBgColors[preset] = color;
+        } else {
+            s_cachedDarkBgColors[preset] = color;
+        }
         os_unfair_lock_unlock(&s_themeLock);
     }
     return color;
@@ -375,53 +476,87 @@ UIColor *YTKACEThemeSurfaceColor(UITraitCollection *traits) {
     if (!YTKACEOLEDActive(traits)) {
         return YTKACEInterfaceSurfaceColor(traits);
     }
+    BOOL light = YTKACEIsLightMode(traits);
     id presetVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
     NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
 
     os_unfair_lock_lock(&s_themeLock);
-    if (preset >= 0 && preset < 8 && s_cachedSurfaceColors[preset] != nil) {
-        UIColor *res = s_cachedSurfaceColors[preset];
-        os_unfair_lock_unlock(&s_themeLock);
-        return res;
+    if (preset >= 0 && preset < 8) {
+        UIColor *res = light ? s_cachedLightSurfaceColors[preset] : s_cachedDarkSurfaceColors[preset];
+        if (res != nil) {
+            os_unfair_lock_unlock(&s_themeLock);
+            return res;
+        }
     }
     os_unfair_lock_unlock(&s_themeLock);
 
     UIColor *color = nil;
-    switch (preset) {
-        case 1: color = [UIColor colorWithRed:0.17 green:0.01 blue:0.04 alpha:1.0]; break;
-        case 2: color = [UIColor colorWithRed:0.13 green:0.04 blue:0.27 alpha:1.0]; break;
-        case 3: color = [UIColor colorWithRed:0.01 green:0.17 blue:0.08 alpha:1.0]; break;
-        case 4: color = [UIColor colorWithRed:0.20 green:0.05 blue:0.02 alpha:1.0]; break;
-        case 5: color = [UIColor colorWithRed:0.16 green:0.02 blue:0.28 alpha:1.0]; break;
-        case 6: color = [UIColor colorWithRed:0.03 green:0.12 blue:0.30 alpha:1.0]; break;
-        case 7: {
-            UIColor *bg = YTKACEThemeBackgroundColor(traits);
-            CGFloat r, g, b, a;
-            if ([bg getRed:&r green:&g blue:&b alpha:&a]) {
-                color = [UIColor colorWithRed:MIN(1.0, r * 1.5 + 0.05)
-                                        green:MIN(1.0, g * 1.5 + 0.05)
-                                         blue:MIN(1.0, b * 1.5 + 0.05)
-                                        alpha:1.0];
-            } else {
-                color = [UIColor colorWithWhite:0.12 alpha:1.0];
+    if (light) {
+        switch (preset) {
+            case 1: color = [UIColor colorWithRed:1.000 green:0.840 blue:0.880 alpha:1.0]; break; // Sakura Surface
+            case 2: color = [UIColor colorWithRed:0.894 green:0.816 blue:0.980 alpha:1.0]; break; // Lavender Surface
+            case 3: color = [UIColor colorWithRed:0.820 green:0.980 blue:0.898 alpha:1.0]; break; // Mint Surface
+            case 4: color = [UIColor colorWithRed:0.996 green:0.855 blue:0.690 alpha:1.0]; break; // Peach Sunset Apricot/Orange Surface!
+            case 5: color = [UIColor colorWithRed:0.945 green:0.890 blue:0.995 alpha:1.0]; break; // Lilac Surface
+            case 6: color = [UIColor colorWithRed:0.860 green:0.945 blue:0.996 alpha:1.0]; break; // Azure Surface
+            case 7: {
+                UIColor *bg = YTKACEThemeBackgroundColor(traits);
+                CGFloat r, g, b, a;
+                if ([bg getRed:&r green:&g blue:&b alpha:&a]) {
+                    color = [UIColor colorWithRed:MAX(0.0, r * 0.90)
+                                            green:MAX(0.0, g * 0.90)
+                                             blue:MAX(0.0, b * 0.90)
+                                            alpha:1.0];
+                } else {
+                    color = [UIColor colorWithWhite:0.92 alpha:1.0];
+                }
+                break;
             }
-            break;
+            default: color = [UIColor colorWithWhite:0.95 alpha:1.0]; break;
         }
-        default: color = [UIColor colorWithWhite:0.08 alpha:1.0]; break;
+    } else {
+        switch (preset) {
+            case 1: color = [UIColor colorWithRed:0.17 green:0.01 blue:0.04 alpha:1.0]; break;
+            case 2: color = [UIColor colorWithRed:0.13 green:0.04 blue:0.27 alpha:1.0]; break;
+            case 3: color = [UIColor colorWithRed:0.01 green:0.17 blue:0.08 alpha:1.0]; break;
+            case 4: color = [UIColor colorWithRed:0.20 green:0.05 blue:0.02 alpha:1.0]; break;
+            case 5: color = [UIColor colorWithRed:0.16 green:0.02 blue:0.28 alpha:1.0]; break;
+            case 6: color = [UIColor colorWithRed:0.03 green:0.12 blue:0.30 alpha:1.0]; break;
+            case 7: {
+                UIColor *bg = YTKACEThemeBackgroundColor(traits);
+                CGFloat r, g, b, a;
+                if ([bg getRed:&r green:&g blue:&b alpha:&a]) {
+                    color = [UIColor colorWithRed:MIN(1.0, r * 1.5 + 0.05)
+                                            green:MIN(1.0, g * 1.5 + 0.05)
+                                             blue:MIN(1.0, b * 1.5 + 0.05)
+                                            alpha:1.0];
+                } else {
+                    color = [UIColor colorWithWhite:0.12 alpha:1.0];
+                }
+                break;
+            }
+            default: color = [UIColor colorWithWhite:0.08 alpha:1.0]; break;
+        }
     }
+
     if (preset >= 0 && preset < 8) {
         os_unfair_lock_lock(&s_themeLock);
-        s_cachedSurfaceColors[preset] = color;
+        if (light) {
+            s_cachedLightSurfaceColors[preset] = color;
+        } else {
+            s_cachedDarkSurfaceColors[preset] = color;
+        }
         os_unfair_lock_unlock(&s_themeLock);
     }
     return color;
 }
 
-UIImage *YTKACEThemeGradientImage(CGSize size) {
+UIImage *YTKACEThemeGradientImageForTraits(CGSize size, UITraitCollection *traits) {
     if (size.width <= 0 || size.height <= 0) return nil;
+    BOOL light = YTKACEIsLightMode(traits);
     id presetVal = YTKACEPreferenceObject(YTKACEThemePresetKey);
     NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
-    if (preset == 0) return nil; // Pure black needs no gradient texture
+    if (preset == 0 && !light) return nil; // Pure black needs no gradient texture
 
     NSString *topHex = YTKACEPreferenceObject(YTKACEThemeTopHexKey) ?: @"";
     NSString *bottomHex = YTKACEPreferenceObject(YTKACEThemeBottomHexKey) ?: @"";
@@ -430,6 +565,7 @@ UIImage *YTKACEThemeGradientImage(CGSize size) {
     if (s_cachedGradientImage != nil &&
         CGSizeEqualToSize(s_cachedGradientSize, size) &&
         s_cachedGradientPreset == preset &&
+        s_cachedGradientIsLight == light &&
         [s_cachedTopHex isEqualToString:topHex] &&
         [s_cachedBottomHex isEqualToString:bottomHex]) {
         UIImage *cachedImg = s_cachedGradientImage;
@@ -438,8 +574,8 @@ UIImage *YTKACEThemeGradientImage(CGSize size) {
     }
     os_unfair_lock_unlock(&s_themeLock);
 
-    UIColor *topColor = YTKACEThemeTopColor();
-    UIColor *bottomColor = YTKACEThemeBottomColor();
+    UIColor *topColor = YTKACEThemeTopColorForTraits(traits);
+    UIColor *bottomColor = YTKACEThemeBottomColorForTraits(traits);
 
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
     format.scale = UIScreen.mainScreen.scale;
@@ -462,6 +598,7 @@ UIImage *YTKACEThemeGradientImage(CGSize size) {
     s_cachedGradientImage = image;
     s_cachedGradientSize = size;
     s_cachedGradientPreset = preset;
+    s_cachedGradientIsLight = light;
     s_cachedTopHex = topHex;
     s_cachedBottomHex = bottomHex;
     os_unfair_lock_unlock(&s_themeLock);
@@ -469,65 +606,92 @@ UIImage *YTKACEThemeGradientImage(CGSize size) {
     return image;
 }
 
+UIImage *YTKACEThemeGradientImage(CGSize size) {
+    return YTKACEThemeGradientImageForTraits(size, nil);
+}
+
 UIColor *YTKACEInterfaceBackgroundColor(UITraitCollection *traits) {
     if (YTKACEOLEDActive(traits)) return YTKACEThemeBackgroundColor(traits);
-    UIUserInterfaceStyle style = traits.userInterfaceStyle;
-    if (style == UIUserInterfaceStyleUnspecified) {
-        style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
-    }
-    return style == UIUserInterfaceStyleDark
-        ? [UIColor colorWithWhite:0.075 alpha:1.0]
-        : UIColor.whiteColor;
+    BOOL light = YTKACEIsLightMode(traits);
+    return light
+        ? UIColor.whiteColor
+        : [UIColor colorWithWhite:0.075 alpha:1.0];
 }
 
 UIColor *YTKACEInterfaceSurfaceColor(UITraitCollection *traits) {
     if (YTKACEOLEDActive(traits)) {
         return YTKACEThemeSurfaceColor(traits);
     }
-    UIUserInterfaceStyle style = traits.userInterfaceStyle;
-    if (style == UIUserInterfaceStyleUnspecified) {
-        style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
-    }
-    return style == UIUserInterfaceStyleDark
-        ? [UIColor colorWithWhite:0.16 alpha:1.0]
-        : [UIColor colorWithWhite:0.95 alpha:1.0];
+    BOOL light = YTKACEIsLightMode(traits);
+    return light
+        ? [UIColor colorWithWhite:0.95 alpha:1.0]
+        : [UIColor colorWithWhite:0.16 alpha:1.0];
 }
 
-UIColor *YTKACEAppAccentColor(void) {
+UIColor *YTKACEAppAccentColorForTraits(UITraitCollection *traits) {
+    BOOL light = YTKACEIsLightMode(traits);
     os_unfair_lock_lock(&s_themeLock);
-    if (s_cachedAccentColor != nil) {
-        UIColor *acc = s_cachedAccentColor;
+    UIColor *cached = light ? s_cachedLightAccentColor : s_cachedDarkAccentColor;
+    if (cached != nil) {
         os_unfair_lock_unlock(&s_themeLock);
-        return acc;
+        return cached;
     }
     os_unfair_lock_unlock(&s_themeLock);
 
     id presetVal = YTKACEPreferenceObject(YTKACEAccentPresetKey);
     NSInteger preset = [presetVal respondsToSelector:@selector(integerValue)] ? [presetVal integerValue] : 0;
     UIColor *color = nil;
-    switch (preset) {
-        case 1: color = [UIColor colorWithRed:0.0 green:0.533 blue:1.0 alpha:1.0]; break; // Neon Blue
-        case 2: color = [UIColor colorWithRed:0.60 green:0.20 blue:1.0 alpha:1.0]; break; // Purple
-        case 3: color = [UIColor colorWithRed:0.0 green:0.80 blue:0.40 alpha:1.0]; break; // Green
-        case 4: color = [UIColor colorWithRed:1.0 green:0.40 blue:0.0 alpha:1.0]; break; // Orange
-        case 5: color = [UIColor colorWithRed:1.0 green:0.20 blue:0.533 alpha:1.0]; break; // Pink
-        case 6: color = [UIColor colorWithRed:0.90 green:0.0 blue:0.0 alpha:1.0]; break; // Crimson
-        case 7: color = [UIColor colorWithWhite:0.95 alpha:1.0]; break; // White
-        case 8: {
-            NSString *hex = YTKACEPreferenceObject(YTKACEAccentHexKey);
-            color = YTKACEColorFromHex(hex, [UIColor colorWithRed:0.749 green:0.0 blue:0.075 alpha:1.0]);
-            break;
+    if (light) {
+        switch (preset) {
+            case 1: color = [UIColor colorWithRed:0.012 green:0.447 blue:0.941 alpha:1.0]; break; // Neon Blue High Contrast
+            case 2: color = [UIColor colorWithRed:0.486 green:0.122 blue:0.890 alpha:1.0]; break; // Purple High Contrast
+            case 3: color = [UIColor colorWithRed:0.024 green:0.608 blue:0.294 alpha:1.0]; break; // Green High Contrast
+            case 4: color = [UIColor colorWithRed:0.918 green:0.345 blue:0.047 alpha:1.0]; break; // Sunset Orange Light Mode (#EA580C)
+            case 5: color = [UIColor colorWithRed:0.882 green:0.090 blue:0.420 alpha:1.0]; break; // Rose Pink Light Mode
+            case 6: color = [UIColor colorWithRed:0.800 green:0.000 blue:0.000 alpha:1.0]; break; // Crimson Light Mode
+            case 7: color = [UIColor colorWithWhite:0.15 alpha:1.0]; break; // Adaptive Monochrome Charcoal for Light Mode
+            case 8: {
+                NSString *hex = YTKACEPreferenceObject(YTKACEAccentHexKey);
+                color = YTKACEColorFromHex(hex, [UIColor colorWithRed:0.749 green:0.0 blue:0.075 alpha:1.0]);
+                break;
+            }
+            default:
+                color = [UIColor colorWithRed:0.800 green:0.0 blue:0.080 alpha:1.0];
+                break;
         }
-        default:
-            color = [UIColor colorWithRed:0.749 green:0.0 blue:0.075 alpha:1.0];
-            break;
+    } else {
+        switch (preset) {
+            case 1: color = [UIColor colorWithRed:0.0 green:0.533 blue:1.0 alpha:1.0]; break; // Neon Blue
+            case 2: color = [UIColor colorWithRed:0.60 green:0.20 blue:1.0 alpha:1.0]; break; // Purple
+            case 3: color = [UIColor colorWithRed:0.0 green:0.80 blue:0.40 alpha:1.0]; break; // Green
+            case 4: color = [UIColor colorWithRed:1.0 green:0.40 blue:0.0 alpha:1.0]; break; // Orange
+            case 5: color = [UIColor colorWithRed:1.0 green:0.20 blue:0.533 alpha:1.0]; break; // Pink
+            case 6: color = [UIColor colorWithRed:0.90 green:0.0 blue:0.0 alpha:1.0]; break; // Crimson
+            case 7: color = [UIColor colorWithWhite:0.95 alpha:1.0]; break; // White
+            case 8: {
+                NSString *hex = YTKACEPreferenceObject(YTKACEAccentHexKey);
+                color = YTKACEColorFromHex(hex, [UIColor colorWithRed:0.749 green:0.0 blue:0.075 alpha:1.0]);
+                break;
+            }
+            default:
+                color = [UIColor colorWithRed:0.749 green:0.0 blue:0.075 alpha:1.0];
+                break;
+        }
     }
 
     os_unfair_lock_lock(&s_themeLock);
-    s_cachedAccentColor = color;
+    if (light) {
+        s_cachedLightAccentColor = color;
+    } else {
+        s_cachedDarkAccentColor = color;
+    }
     os_unfair_lock_unlock(&s_themeLock);
 
     return color;
+}
+
+UIColor *YTKACEAppAccentColor(void) {
+    return YTKACEAppAccentColorForTraits(nil);
 }
 
 BOOL YTKACESponsorBlockEnabled(void) {
