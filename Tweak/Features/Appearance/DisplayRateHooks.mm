@@ -109,6 +109,46 @@ static void YTKACEAnimationSetPreferredFrameRateRange(CAAnimation *receiver,
     }
 }
 
+void YTKACEInstallDisplayRateHooks(void) {
+    static dispatch_once_t cacheToken;
+    dispatch_once(&cacheToken, ^{
+        NSURLCache *shared = [[NSURLCache alloc] initWithMemoryCapacity:256 * 1024 * 1024
+                                                           diskCapacity:1024 * 1024 * 1024
+                                                               diskPath:nil];
+        [NSURLCache setSharedURLCache:shared];
+        [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidReceiveMemoryWarningNotification
+                                                        object:nil
+                                                         queue:NSOperationQueue.mainQueue
+                                                    usingBlock:^(__unused NSNotification *note) {
+            [NSURLCache.sharedURLCache removeAllCachedResponses];
+        }];
+    });
+
+    YTKACEInstallInstanceHook(@"NSBundle",
+                              @"objectForInfoDictionaryKey:",
+                              (IMP)YTKACEObjectForInfoDictionaryKey,
+                              &OriginalObjectForInfoDictionaryKey);
+
+    YTKACEInstallInstanceHook(@"NSBundle",
+                              @"infoDictionary",
+                              (IMP)YTKACEInfoDictionary,
+                              &OriginalInfoDictionary);
+
+    YTKACEInstallInstanceHook(@"CADisplayLink",
+                              @"setPreferredFrameRateRange:",
+                              (IMP)YTKACEDisplayLinkSetPreferredFrameRateRange,
+                              &OriginalDisplayLinkSetPreferredFrameRateRange);
+
+    YTKACEInstallInstanceHook(@"CADisplayLink",
+                              @"setPreferredFramesPerSecond:",
+                              (IMP)YTKACEDisplayLinkSetPreferredFramesPerSecond,
+                              &OriginalDisplayLinkSetPreferredFramesPerSecond);
+
+    YTKACEInstallInstanceHook(@"CALayer",
+                              @"setPreferredFrameRateRange:",
+                              (IMP)YTKACELayerSetPreferredFrameRateRange,
+                              &OriginalLayerSetPreferredFrameRateRange);
+
     YTKACEInstallInstanceHook(@"CAAnimation",
                               @"setPreferredFrameRateRange:",
                               (IMP)YTKACEAnimationSetPreferredFrameRateRange,
