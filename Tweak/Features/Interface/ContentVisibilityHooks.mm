@@ -7,10 +7,8 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
-static IMP OriginalDisplayViewDidMove;
 static IMP OriginalActionCellPrepareForReuse;
 static IMP OriginalFixedBarLayout;
-static IMP OriginalDisplayViewSetIdentifier;
 static IMP OriginalAddSections;
 static IMP OriginalSectionControllers;
 static IMP OriginalEnableSubheaderBar;
@@ -1443,28 +1441,6 @@ static void YTKACEApplyContentVisibility(UIView *view) {
                                  nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-}
-
-static void YTKACEDisplayViewDidMove(UIView *receiver, SEL selector) {
-    if (OriginalDisplayViewDidMove != NULL) {
-        ((void (*)(id, SEL))OriginalDisplayViewDidMove)(receiver, selector);
-    }
-    YTKACEApplyContentVisibility(receiver);
-    YTKACEHandleAdDisplayView(receiver);
-}
-
-static void YTKACEDisplayViewSetIdentifier(UIView *receiver,
-                                           SEL selector,
-                                           NSString *identifier) {
-    if (OriginalDisplayViewSetIdentifier != NULL) {
-        ((void (*)(id, SEL, id))OriginalDisplayViewSetIdentifier)(
-            receiver,
-            selector,
-            identifier
-        );
-    }
-    YTKACEApplyContentVisibility(receiver);
-    YTKACEHandleAdDisplayView(receiver);
 }
 
 static BOOL YTKACEHideTopics(void) {
