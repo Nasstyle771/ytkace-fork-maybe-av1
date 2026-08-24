@@ -13,7 +13,6 @@ void YTKACEHandleAdDisplayView(UIView *view);
 void YTKACECollapseHostCell(UIView *view);
 void YTKACEHandleAdCellLayout(UIView *cell);
 void YTKACEHandleAdCellReuse(UIView *cell);
-NSArray *YTKACEFilterAdSections(NSArray *sections);
 void YTKACEInstallPromoHooks(void);
 void YTKACEInstallSponsorBlockHooks(void);
 void YTKACEInstallDownloadHooks(void);

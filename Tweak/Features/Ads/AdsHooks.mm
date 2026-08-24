@@ -34,8 +34,6 @@ static IMP OriginalCompanionAd;
 static IMP OriginalHasCompanionAdRenderer;
 static IMP OriginalHasAppPromoCompanionAdRenderer;
 static IMP OriginalHasShoppingCompanionAdRenderer;
-static IMP OriginalElementContentsArray;
-static IMP OriginalItemSectionContentsArray;
 static const void *YTKACEAdMatchAssociation = &YTKACEAdMatchAssociation;
 static const void *YTKACEAdEmptyAssociation = &YTKACEAdEmptyAssociation;
 
@@ -480,84 +478,7 @@ static id YTKACEElementRenderer(id object) {
         : nil;
 }
 
-static NSArray *YTKACEFilterAdContents(NSArray *contents, id owner) {
-    if (!YTKACEFeatureEnabled(YTKACENoAdsKey) ||
-        ![contents isKindOfClass:NSArray.class] || contents.count == 0) {
-        return contents;
-    }
 
-    // Fast check if any element is an ad before allocating array
-    BOOL hasAd = NO;
-    for (id content in contents) {
-        if (YTKACEObjectLooksLikeAd(content) ||
-            YTKACEObjectLooksLikeAd(YTKACEElementRenderer(content))) {
-            hasAd = YES;
-            break;
-        }
-    }
-    if (!hasAd) return contents;
-
-    NSMutableArray *filtered = [NSMutableArray arrayWithCapacity:contents.count];
-    for (id content in contents) {
-        id renderer = YTKACEElementRenderer(content);
-        BOOL contentAd = YTKACEObjectLooksLikeAd(content);
-        BOOL rendererAd = YTKACEObjectLooksLikeAd(renderer);
-        if (!contentAd && !rendererAd) {
-            [filtered addObject:content];
-        }
-    }
-    if (filtered.count == 0 && owner != nil) {
-        objc_setAssociatedObject(owner, YTKACEAdEmptyAssociation, @YES,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    return filtered;
-}
-
-static NSArray *YTKACEElementContentsArray(id receiver, SEL selector) {
-    NSArray *contents = OriginalElementContentsArray == NULL ? nil :
-        ((id (*)(id, SEL))OriginalElementContentsArray)(receiver, selector);
-    return YTKACEFilterAdContents(contents, receiver);
-}
-
-static NSArray *YTKACEItemSectionContentsArray(id receiver, SEL selector) {
-    NSArray *contents = OriginalItemSectionContentsArray == NULL ? nil :
-        ((id (*)(id, SEL))OriginalItemSectionContentsArray)(receiver, selector);
-    return YTKACEFilterAdContents(contents, receiver);
-}
-
-NSArray *YTKACEFilterAdSections(NSArray *sections) {
-    if (!YTKACEFeatureEnabled(YTKACENoAdsKey) ||
-        ![sections isKindOfClass:NSArray.class] || sections.count == 0) {
-        return sections;
-    }
-
-    BOOL needsFilter = NO;
-    for (id section in sections) {
-        if (YTKACEObjectLooksLikeAd(section) ||
-            YTKACEObjectLooksLikeAd(YTKACEElementRenderer(section)) ||
-            [objc_getAssociatedObject(section, YTKACEAdEmptyAssociation) boolValue]) {
-            needsFilter = YES;
-            break;
-        }
-    }
-    if (!needsFilter) return sections;
-
-    NSMutableArray *filtered = [NSMutableArray arrayWithCapacity:sections.count];
-    for (id section in sections) {
-        if (YTKACEObjectLooksLikeAd(section) ||
-            YTKACEObjectLooksLikeAd(YTKACEElementRenderer(section))) {
-            continue;
-        }
-        NSArray *contents = YTKACEObjectValue(section, @"contentsArray");
-        if ([objc_getAssociatedObject(section, YTKACEAdEmptyAssociation) boolValue] ||
-            ([contents isKindOfClass:NSArray.class] && contents.count != 0 &&
-             YTKACEFilterAdContents(contents, section).count == 0)) {
-            continue;
-        }
-        [filtered addObject:section];
-    }
-    return filtered;
-}
 
 static id YTKACENoCompanionAd(id receiver, SEL selector) {
     return YTKACEFeatureEnabled(YTKACENoAdsKey)
@@ -735,12 +656,4 @@ void YTKACEInstallAdsHooks(void) {
                               @"hasShoppingCompanionAdRenderer",
                               (IMP)YTKACEHasShoppingCompanionAdRenderer,
                               &OriginalHasShoppingCompanionAdRenderer);
-    YTKACEInstallInstanceHook(@"YTIElementRenderer",
-                              @"contentsArray",
-                              (IMP)YTKACEElementContentsArray,
-                              &OriginalElementContentsArray);
-    YTKACEInstallInstanceHook(@"YTIItemSectionRenderer",
-                              @"contentsArray",
-                              (IMP)YTKACEItemSectionContentsArray,
-                              &OriginalItemSectionContentsArray);
 }
