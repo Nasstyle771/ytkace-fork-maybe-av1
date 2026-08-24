@@ -34,7 +34,7 @@ static NSUserDefaults *YTKACEDefaults(void) {
     return NSUserDefaults.standardUserDefaults;
 }
 
-static void YTKACESyncDefaults(void) {
+void YTKACESyncDefaults(void) {
     [YTKACEDefaults() synchronize];
     CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication);
 }
