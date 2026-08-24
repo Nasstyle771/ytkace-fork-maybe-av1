@@ -44,11 +44,10 @@ static BOOL YTKACEPlaybackTimeNotificationsNeeded;
 static id YTKACEPlaybackPreferenceObserver;
 static os_unfair_lock YTKACESponsorVectorLock = OS_UNFAIR_LOCK_INIT;
 
-@interface YTKACEFastSegmentContainer : NSObject
-@property(nonatomic, assign) std::vector<YTKACESponsorFastSegment> segments;
-@end
-
-@implementation YTKACEFastSegmentContainer
+@interface YTKACEFastSegmentContainer : NSObject {
+@public
+    std::vector<YTKACESponsorFastSegment> segments;
+}
 @end
 
 static void YTKACERefreshPlaybackTimePreferenceState(void) {
@@ -356,12 +355,12 @@ static void YTKACEEvaluateSponsorTime(id controller, double time) {
 
     YTKACEFastSegmentContainer *container =
         objc_getAssociatedObject(controller, YTKACESponsorFastSegmentsAssociation);
-    if (container == nil || container.segments.empty()) {
+    if (container == nil || container->segments.empty()) {
         return;
     }
 
     os_unfair_lock_lock(&YTKACESponsorVectorLock);
-    auto &segments = container.segments;
+    auto &segments = container->segments;
     size_t count = segments.size();
 
     // Reset skipped status on backward scrub
@@ -454,7 +453,7 @@ static void YTKACEDidActivateVideo(id receiver,
 
         // Pre-build fast C++ segments sorted by start time
         YTKACEFastSegmentContainer *container = [YTKACEFastSegmentContainer new];
-        container.segments.reserve(segments.count);
+        container->segments.reserve(segments.count);
         for (NSDictionary<NSString *, id> *dict in segments) {
             double start = [dict[@"start"] doubleValue];
             double end = [dict[@"end"] doubleValue];
@@ -462,7 +461,7 @@ static void YTKACEDidActivateVideo(id receiver,
                 ? dict[@"category"] : @"sponsor";
             NSInteger behavior = YTKACESponsorCategoryBehavior(category);
             if (behavior != 2 && behavior != 3 && isfinite(start) && isfinite(end) && end > start) {
-                container.segments.push_back({start, end, category, behavior, false});
+                container->segments.push_back({start, end, category, behavior, false});
             }
         }
         objc_setAssociatedObject(strongReceiver,
