@@ -58,8 +58,6 @@ static NSString *YTKACENormalizedDescription(id object) {
     return value;
 }
 
-static BOOL YTKACEContentContains(NSString *token,
-                                  NSArray<NSString *> *needles);
 static BOOL YTKACEHideTopics(void);
 static BOOL YTKACEEnsureStructuralActionHook(void);
 
@@ -235,16 +233,6 @@ static id YTKACEContentValue(id object, NSString *key) {
 }
 
 
-
-static BOOL YTKACEContentContains(NSString *token,
-                                  NSArray<NSString *> *needles) {
-    for (NSString *needle in needles) {
-        if ([token containsString:needle]) {
-            return YES;
-        }
-    }
-    return NO;
-}
 
 static BOOL YTKACEHideTopics(void) {
     return YTKACEFeatureEnabled(@"YTKACE.Preference.Navigation.TopicsHidden");
