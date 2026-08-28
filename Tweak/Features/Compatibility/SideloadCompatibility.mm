@@ -202,12 +202,45 @@ static NSURL *YTKACEGroupContainerURL(NSFileManager *receiver,
     return fallback;
 }
 
+static void YTKACEExpandActiveWatchView(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (![scene isKindOfClass:UIWindowScene.class]) continue;
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+            for (UIWindow *window in windowScene.windows) {
+                UIViewController *root = window.rootViewController;
+                if (!root) continue;
+                NSMutableArray *queue = [NSMutableArray arrayWithObject:root];
+                while (queue.count > 0) {
+                    UIViewController *vc = queue.firstObject;
+                    [queue removeObjectAtIndex:0];
+
+                    SEL setWatchViewLayout = NSSelectorFromString(@"setWatchViewLayout:");
+                    if ([vc respondsToSelector:setWatchViewLayout]) {
+                        ((void (*)(id, SEL, NSInteger))objc_msgSend)(vc, setWatchViewLayout, 2);
+                    }
+                    SEL expand = NSSelectorFromString(@"expandPlayer");
+                    if ([vc respondsToSelector:expand]) {
+                        ((void (*)(id, SEL))objc_msgSend)(vc, expand);
+                    }
+                    SEL resume = NSSelectorFromString(@"resumePlayback");
+                    if ([vc respondsToSelector:resume]) {
+                        ((void (*)(id, SEL))objc_msgSend)(vc, resume);
+                    }
+                    [queue addObjectsFromArray:vc.childViewControllers];
+                }
+            }
+        }
+    });
+}
+
 static BOOL YTKACEApplicationOpenURL(id receiver,
                                      SEL selector,
                                      UIApplication *application,
                                      NSURL *URL,
                                      NSDictionary *options) {
     (void)selector;
+    YTKACEExpandActiveWatchView();
     SEL legacy = NSSelectorFromString(
         @"application:openURL:sourceApplication:annotation:"
     );
@@ -232,15 +265,33 @@ static BOOL YTKACEApplicationOpenURL(id receiver,
             URL
         );
     }
-    return NO;
+    return YES;
+}
+
+static void YTKACESceneOpenURLContexts(id receiver,
+                                       SEL selector,
+                                       UIScene *scene,
+                                       NSSet *URLContexts) {
+    (void)selector;
+    (void)scene;
+    (void)URLContexts;
+    YTKACEExpandActiveWatchView();
+}
+
+static void YTKACESceneContinueUserActivity(id receiver,
+                                            SEL selector,
+                                            UIScene *scene,
+                                            NSUserActivity *userActivity) {
+    (void)selector;
+    (void)scene;
+    (void)userActivity;
+    YTKACEExpandActiveWatchView();
 }
 
 static void YTKACEApplicationSetDelegate(UIApplication *receiver,
                                          SEL selector,
                                          id delegate) {
-    if (delegate != nil &&
-        [NSBundle.mainBundle objectForInfoDictionaryKey:
-            @"LSSupportsOpeningDocumentsInPlace"] != nil) {
+    if (delegate != nil) {
         SEL openSelector = NSSelectorFromString(@"application:openURL:options:");
         Class delegateClass = object_getClass(delegate);
         if (class_getInstanceMethod(delegateClass, openSelector) == NULL) {
@@ -318,8 +369,35 @@ void YTKACEInstallSideloadCompatibilityHooks(void) {
                               &OriginalGroupContainerURL);
     YTKACEInstallClassHook(@"GULAppEnvironmentUtil", @"isFromAppStore",
                            (IMP)YTKACETrue, NULL);
-    YTKACEInstallClassHook(@"APMAEU", @"isFAS",
-                           (IMP)YTKACETrue, NULL);
     YTKACEInstallClassHook(@"SSOClientLogin", @"defaultSourceString",
                            (IMP)YTKACEAppIdentifier, NULL);
+
+    Class sceneDelegateClass = NSClassFromString(@"YTSceneDelegate");
+    if (sceneDelegateClass != Nil) {
+        SEL openURLSelector = NSSelectorFromString(@"scene:openURLContexts:");
+        if (class_getInstanceMethod(sceneDelegateClass, openURLSelector) == NULL) {
+            class_addMethod(sceneDelegateClass,
+                            openURLSelector,
+                            (IMP)YTKACESceneOpenURLContexts,
+                            "v@:@@");
+        } else {
+            YTKACEInstallInstanceHook(@"YTSceneDelegate",
+                                      @"scene:openURLContexts:",
+                                      (IMP)YTKACESceneOpenURLContexts,
+                                      NULL);
+        }
+
+        SEL continueUserActivitySelector = NSSelectorFromString(@"scene:continueUserActivity:");
+        if (class_getInstanceMethod(sceneDelegateClass, continueUserActivitySelector) == NULL) {
+            class_addMethod(sceneDelegateClass,
+                            continueUserActivitySelector,
+                            (IMP)YTKACESceneContinueUserActivity,
+                            "v@:@@");
+        } else {
+            YTKACEInstallInstanceHook(@"YTSceneDelegate",
+                                      @"scene:continueUserActivity:",
+                                      (IMP)YTKACESceneContinueUserActivity,
+                                      NULL);
+        }
+    }
 }

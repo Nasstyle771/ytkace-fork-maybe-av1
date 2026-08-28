@@ -414,6 +414,15 @@
     [self resumeYouTubePlayer];
 }
 
+- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController
+    restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL restored))completionHandler {
+    (void)pictureInPictureController;
+    [self resumeYouTubePlayer];
+    if (completionHandler) {
+        completionHandler(YES);
+    }
+}
+
 @end
 
 void YTKACEInstallPiPHooks(void) {
