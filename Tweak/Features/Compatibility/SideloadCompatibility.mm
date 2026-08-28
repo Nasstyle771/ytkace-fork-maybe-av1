@@ -272,6 +272,7 @@ static void YTKACESceneOpenURLContexts(id receiver,
                                        SEL selector,
                                        UIScene *scene,
                                        NSSet *URLContexts) {
+    (void)receiver;
     (void)selector;
     (void)scene;
     (void)URLContexts;
@@ -282,6 +283,7 @@ static void YTKACESceneContinueUserActivity(id receiver,
                                             SEL selector,
                                             UIScene *scene,
                                             NSUserActivity *userActivity) {
+    (void)receiver;
     (void)selector;
     (void)scene;
     (void)userActivity;
